@@ -1,0 +1,69 @@
+{% if vm.interactive %}
+/* ============================================================
+   ReleaseBoard — Interactive Mode (Config, Analysis, SSE)
+   ============================================================ */
+const RB = (function(){
+  let draft = null;
+  let schema = null;
+  let drawerOpen = false;
+  let currentTab = 'form';
+  let validationErrors = [];
+  let analysisPhase = 'idle';
+  let eventSource = null;
+
+  async function init(){
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    draft = data.draft;
+    updateUnsavedBadge(data.has_unsaved_changes);
+    const sRes = await fetch('/api/config/schema');
+    const sData = await sRes.json();
+    schema = sData.schema || sData;
+    populateForm();
+    initJsonAutocomplete();
+  }
+
+  {% include '_scripts_config_ui.html.j2' %}
+  {% include '_scripts_editor.html.j2' %}
+  {% include '_scripts_analysis.html.j2' %}
+
+  // Init
+  init().then(function() {
+    // Auto-start analysis only on first load (no results yet)
+    var content = document.getElementById('dashboardContent');
+    var hasResults = content && content.querySelector('.metrics-grid');
+    if (!hasResults && typeof startAnalysis === 'function') {
+      startAnalysis();
+    }
+  });
+  initSectionOrder();
+  loadTemplates();
+
+  {% include '_scripts_wizard.html.j2' %}
+
+  return {
+    toggleDrawer, closeDrawer, switchTab, startAnalysis, stopAnalysis,
+    addLayer, removeLayer, removeLayerById, toggleLayerCollapse, updateLayer, onLayerBranchInput, resetLayerBranch, renderLayers,
+    addRepo, removeRepo, updateRepo, updateRepoName, resetRepoBranch, toggleRepoAccordion, renderRepos, autoFillRepoName, clearDraftFlag,
+    editRepoByName, deleteRepoByName, deriveNameFromUrl,
+    applyConfig, saveConfig, resetConfig, discardConfig, resetToDefaults, importConfig, exportConfig, exportHTML,
+    openConfigImport, closeConfigImport, handleConfigImportFile, configImportReplace, configImportPreview, discardConfigPreview,
+    toggleCfgImportSchema, toggleCfgImportExample,
+    openTagExport, closeTagExport, tagExportDownload, tagExportCopy, _tagExportRefresh,
+    applyTemplate, deleteTemplate,
+    renderEffectiveTab, insertAcFromClick,
+    // Wizard
+    openWizard, closeWizard, wizGoStep, wizNext, wizPrev,
+    wizAddLayer, wizRemoveLayer, wizUpdateLayer, wizSetProvider, wizValidateStep0,
+    wizToggleRepo, wizEditRepo, wizSetAllBranches, wizApply
+  };
+})();
+/* Auto-open wizard if redirected from first-run screen */
+(function(){
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('open_wizard') === '1' && typeof RB !== 'undefined' && RB.openWizard) {
+    history.replaceState(null, '', window.location.pathname);
+    setTimeout(function(){ RB.openWizard(); }, 300);
+  }
+})();
+{% endif %}

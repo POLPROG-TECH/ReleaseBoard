@@ -1,0 +1,205 @@
+{% if vm.interactive %}
+<!-- ===== Quick Settings Panel ===== -->
+<style>
+.qs-trigger{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;font-size:16px;transition:all var(--transition);flex-shrink:0;}
+.qs-trigger:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-light);}
+#qsTrigger.open .qs-trigger{border-color:var(--primary);color:var(--primary);background:var(--primary-light);}
+.qs-panel{display:none;position:absolute;top:calc(100% + 8px);right:0;width:320px;max-height:calc(100vh - 80px);overflow-y:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);z-index:500;animation:qsFadeIn .15s ease-out;}
+#qsTrigger.open .qs-panel{display:block;}
+@keyframes qsFadeIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
+.qs-section{padding:14px 16px;border-bottom:1px solid var(--border);}
+.qs-section:last-child{border-bottom:none;}
+.qs-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:10px;}
+.qs-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.qs-row:last-child{margin-bottom:0;}
+.qs-label{flex:1;font-size:13px;font-weight:500;color:var(--text-primary);}
+.qs-btn-group{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;}
+.qs-btn{padding:5px 10px;font-size:12px;font-weight:500;font-family:var(--font);border:none;background:var(--bg-secondary);color:var(--text-secondary);cursor:pointer;transition:all var(--transition);white-space:nowrap;}
+.qs-btn+.qs-btn{border-left:1px solid var(--border);}
+.qs-btn:hover{background:var(--bg-hover);color:var(--text-primary);}
+.qs-btn.active{background:var(--primary);color:#fff;font-weight:600;}
+.qs-color-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.qs-color-row:last-child{margin-bottom:0;}
+.qs-color-label{width:72px;font-size:12px;font-weight:500;color:var(--text-secondary);flex-shrink:0;}
+.qs-color-input{width:32px;height:28px;padding:2px;border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;flex-shrink:0;background:var(--bg-input);}
+.qs-hex-input{flex:1;min-width:0;font-family:var(--font-mono);font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-input);color:var(--text-primary);}
+.qs-hex-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 2px var(--ring);}
+.qs-hex-input.invalid{border-color:#dc2626;}
+.qs-reset-btn{flex-shrink:0;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-tertiary);cursor:pointer;font-size:13px;padding:0;transition:all var(--transition);}
+.qs-reset-btn:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-light);}
+.qs-apply-row{display:flex;gap:8px;margin-top:4px;}
+.qs-apply-btn{flex:1;padding:7px 12px;font-size:12px;font-weight:600;font-family:var(--font);border:none;border-radius:var(--radius-sm);cursor:pointer;transition:all var(--transition);text-align:center;}
+.qs-apply-btn.primary{background:var(--primary);color:#fff;}
+.qs-apply-btn.primary:hover{opacity:.88;}
+.qs-apply-btn.secondary{background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);}
+.qs-apply-btn.secondary:hover{border-color:var(--primary);color:var(--primary);}
+.qs-field{display:flex;flex-direction:column;gap:3px;margin-bottom:6px;}
+.qs-field-label{font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.3px;}
+.qs-text-input{width:100%;padding:6px 8px;font-size:12px;font-family:var(--font);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary);outline:none;transition:border-color var(--transition);box-sizing:border-box;}
+.qs-text-input:focus{border-color:var(--primary);}
+/* Midnight overrides */
+[data-theme="midnight"] .qs-panel{box-shadow:0 8px 32px rgba(0,0,0,.5);}
+/* Responsive */
+@media(max-width:480px){
+  .qs-panel{width:calc(100vw - 24px);right:-8px;}
+  .qs-btn{padding:5px 8px;font-size:11px;}
+  .qs-color-label{width:60px;font-size:11px;}
+}
+</style>
+
+<script>
+(function(){
+  var qsOpen=false;
+  var qsTrigger=document.getElementById('qsTrigger');
+  var qsColors={
+    primary:{el:null,hex:null,def:'#fb6400'},
+    secondary:{el:null,hex:null,def:'#002754e6'},
+    tertiary:{el:null,hex:null,def:'#10b981'}
+  };
+
+  function qsToggle(){
+    qsOpen=!qsOpen;
+    qsTrigger.classList.toggle('open',qsOpen);
+  }
+  function qsClose(){
+    qsOpen=false;
+    qsTrigger.classList.remove('open');
+  }
+
+  document.addEventListener('click',function(e){
+    if(qsOpen && !e.target.closest('#qsTrigger')){qsClose();}
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape' && qsOpen){qsClose();}
+  });
+
+  /* Theme switching */
+  document.querySelectorAll('.qs-btn[data-qs-theme]').forEach(function(b){
+    b.addEventListener('click',function(e){
+      e.stopPropagation();
+      var t=b.dataset.qsTheme;
+      setTheme(t);
+      document.querySelectorAll('.qs-btn[data-qs-theme]').forEach(function(x){x.classList.toggle('active',x.dataset.qsTheme===t);});
+      /* Also sync header theme buttons if present */
+      document.querySelectorAll('.theme-btn[data-theme]').forEach(function(x){x.classList.toggle('active',x.dataset.theme===t);});
+      /* Persist theme choice to config */
+      fetch('/api/config/branding',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({theme:t})}).catch(function(){});
+    });
+  });
+
+  /* Locale switching */
+  document.querySelectorAll('.qs-btn[data-qs-locale]').forEach(function(b){
+    b.addEventListener('click',function(e){
+      e.stopPropagation();
+      sessionStorage.setItem('rb_restore_qs', 'true');
+      switchLocale(b.dataset.qsLocale);
+    });
+  });
+
+  /* Color pickers — init */
+  function qsInitColors(){
+    ['primary','secondary','tertiary'].forEach(function(role){
+      var pick=document.getElementById('qsColor_'+role);
+      var hex=document.getElementById('qsHex_'+role);
+      if(!pick||!hex)return;
+      qsColors[role].el=pick;
+      qsColors[role].hex=hex;
+      pick.addEventListener('input',function(){
+        hex.value=pick.value;
+        hex.classList.remove('invalid');
+        qsApplyColorLive(role,pick.value);
+      });
+      hex.addEventListener('input',function(){
+        var v=hex.value.trim();
+        if(/^#[0-9a-fA-F]{6,8}$/.test(v)){
+          pick.value=v.substring(0,7);
+          hex.classList.remove('invalid');
+          qsApplyColorLive(role,v);
+        }else{hex.classList.add('invalid');}
+      });
+    });
+  }
+
+  function qsApplyColorLive(role,value){
+    var varName=role==='primary'?'--primary':role==='secondary'?'--secondary':'--tertiary';
+    document.documentElement.style.setProperty(varName,value);
+    if(role==='primary'){
+      document.documentElement.style.setProperty('--primary-light',value+'14');
+      document.documentElement.style.setProperty('--ring',value+'33');
+    }
+  }
+
+  function qsResetColor(role){
+    var c=qsColors[role];
+    if(!c||!c.el)return;
+    c.el.value=c.def.substring(0,7);
+    c.hex.value=c.def;
+    c.hex.classList.remove('invalid');
+    qsApplyColorLive(role,c.def);
+  }
+
+  function qsSaveColors(){
+    var body={};
+    ['primary','secondary','tertiary'].forEach(function(role){
+      var c=qsColors[role];
+      if(c&&c.hex)body[role+'_color']=c.hex.value.trim()||c.def;
+    });
+    var titleEl=document.getElementById('qsBrandTitle');
+    var subtitleEl=document.getElementById('qsBrandSubtitle');
+    var companyEl=document.getElementById('qsBrandCompany');
+    if(titleEl)body.title=titleEl.value;
+    if(subtitleEl)body.subtitle=subtitleEl.value;
+    if(companyEl)body.company=companyEl.value;
+    fetch('/api/config/branding',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();}).then(function(d){
+      if(d.ok){
+        /* Sync drawer color pickers if open */
+        ['primary','secondary','tertiary'].forEach(function(role){
+          var dp=document.querySelector('[data-path="branding.'+role+'_color"]');
+          if(dp)dp.value=(body[role+'_color']||'').substring(0,7);
+          var dh=document.querySelector('[data-color-for="branding.'+role+'_color"]');
+          if(dh)dh.value=body[role+'_color']||'';
+        });
+        /* Sync drawer text fields if open */
+        ['title','subtitle','company'].forEach(function(f){
+          var dp=document.querySelector('[data-path="branding.'+f+'"]');
+          if(dp)dp.value=body[f]||'';
+        });
+        /* Update header branding live */
+        if(body.title){
+          var brand=document.querySelector('.brand');
+          if(brand)brand.title=body.title;
+          document.title=body.title+' — '+(document.title.split('—')[1]||'').trim();
+        }
+        if(body.subtitle!==undefined){
+          var sub=document.getElementById('brandSubtitle');
+          if(sub)sub.textContent=body.subtitle;
+        }
+        if(body.company!==undefined){
+          var comp=document.getElementById('brandCompany');
+          if(comp)comp.textContent=body.company;
+        }
+      }
+    }).catch(function(){});
+    qsClose();
+  }
+
+  function qsResetAll(){
+    ['primary','secondary','tertiary'].forEach(function(role){qsResetColor(role);});
+  }
+
+  window.qsToggle=qsToggle;
+  window.qsResetColor=qsResetColor;
+  window.qsSaveColors=qsSaveColors;
+  window.qsResetAll=qsResetAll;
+
+  document.addEventListener('DOMContentLoaded', function() {
+    qsInitColors();
+    if (sessionStorage.getItem('rb_restore_qs') === 'true') {
+      sessionStorage.removeItem('rb_restore_qs');
+      // Wait a tiny bit to ensure the UI is fully rendered before opening the panel
+      setTimeout(function() { if (!qsOpen) qsToggle(); }, 50);
+    }
+  });
+})();
+</script>
+{% endif %}

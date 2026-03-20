@@ -1,0 +1,692 @@
+/**
+ * ReleasePilot Wizard — release preparation workflow for ReleaseBoard.
+ *
+ * Namespace: RP (global, consistent with existing RB namespace pattern)
+ * Depends on: RB.T() for i18n translations (defined in _scripts_core.html.j2)
+ */
+(function() {
+  'use strict';
+
+  const TOTAL_STEPS = 4;
+
+  // Wizard state
+  let currentStep = 0;
+  let repoContext = null;     // fetched from API
+  let prepResult = null;      // result from generation
+  let editedContent = null;   // user-edited content (null = use generated)
+  let isGenerating = false;
+  let isConfirmed = false;
+
+  // --- Helpers ---
+  function $(id) { return document.getElementById(id); }
+  function T(key, fallback) { return (typeof _t === 'function') ? _t(key) : fallback || key; }
+  function show(el) { if (el) { el.classList.remove('hidden'); el.style.display = ''; } }
+  function hide(el) { if (el) el.style.display = 'none'; }
+
+  // --- Public API ---
+  window.RP = {
+    openWizard,
+    closeWizard,
+    nextStep,
+    prevStep,
+    retryGenerate,
+    toggleEdit,
+    downloadNotes,
+    copyNotes,
+  };
+
+  /**
+   * Open the release wizard for a specific repository.
+   * Called from the repo table row action button.
+   */
+  var _releaseFocusTrap = null;
+
+  function openWizard(repoName) {
+    currentStep = 0;
+    repoContext = null;
+    prepResult = null;
+    editedContent = null;
+    isGenerating = false;
+    isConfirmed = false;
+
+    // Reset UI
+    _resetAllSteps();
+    _updateStepUI();
+
+    // Show overlay
+    const overlay = $('rpWizardOverlay');
+    if (overlay) {
+      overlay.classList.add('active');
+      document.body.style.overflow = 'hidden';
+      // B1: Activate focus trap
+      if (typeof trapFocus === 'function') {
+        setTimeout(function() { _releaseFocusTrap = trapFocus(overlay); }, 100);
+      }
+    }
+
+    // Fetch capabilities + repo context in parallel
+    _fetchCapabilities();
+    _fetchRepoContext(repoName);
+    _initAudienceHints();
+    _initFormatHints();
+  }
+
+  function closeWizard() {
+    const overlay = $('rpWizardOverlay');
+    if (overlay) {
+      overlay.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+    // B1: Release focus trap
+    if (_releaseFocusTrap) { _releaseFocusTrap(); _releaseFocusTrap = null; }
+  }
+
+  function _isBinaryFormat() {
+    const fmt = document.getElementById('rpOutputFormat')?.value || '';
+    return fmt === 'pdf' || fmt === 'docx';
+  }
+
+  function nextStep() {
+    if (isGenerating) return;
+
+    // Validate current step before advancing
+    if (!_validateCurrentStep()) return;
+
+    if (currentStep === 1) {
+      // Configure → Preview: trigger generation
+      currentStep = 2;
+      _updateStepUI();
+      _generateReleaseNotes();
+      return;
+    }
+
+    if (currentStep === 3) {
+      // Confirm step: execute final action
+      _confirmRelease();
+      return;
+    }
+
+    if (currentStep < TOTAL_STEPS - 1) {
+      currentStep++;
+      _updateStepUI();
+      if (currentStep === 3) {
+        _populateConfirmation();
+      }
+    }
+  }
+
+  function prevStep() {
+    if (isGenerating) return;
+    if (currentStep > 0) {
+      // If going back from preview, reset generation state
+      if (currentStep === 2) {
+        prepResult = null;
+        editedContent = null;
+      }
+      currentStep--;
+      _updateStepUI();
+    }
+  }
+
+  function retryGenerate() {
+    _generateReleaseNotes();
+  }
+
+  function toggleEdit() {
+    const content = $('rpPreviewContent');
+    const btn = $('rpEditToggle');
+    if (!content) return;
+
+    if (content.contentEditable === 'true') {
+      content.contentEditable = 'false';
+      content.classList.remove('rp-editable');
+      btn.textContent = T('rp.wizard.edit_content', 'Edit content');
+      // Save edited content
+      editedContent = content.innerText;
+    } else {
+      content.contentEditable = 'true';
+      content.classList.add('rp-editable');
+      btn.textContent = '✓ ' + T('rp.wizard.btn_close', 'Done');
+      content.focus();
+    }
+  }
+
+  function downloadNotes() {
+    const format = (($('rpOutputFormat') || {}).value || 'markdown').toLowerCase();
+    const isBinary = (format === 'pdf' || format === 'docx');
+    const repoName = repoContext ? repoContext.name : 'release';
+    const version = ($('rpReleaseVersion') || {}).value || 'notes';
+
+    if (isBinary && prepResult && prepResult.content) {
+      // Decode base64 → binary blob
+      const raw = atob(prepResult.content);
+      const bytes = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+      const mime = format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      const blob = new Blob([bytes], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${repoName}-${version}-release-notes.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } else {
+      const content = _getFinalContent();
+      if (!content) return;
+      const ext = format === 'json' ? 'json' : format === 'plaintext' ? 'txt' : 'md';
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${repoName}-${version}-release-notes.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    _showToast(T('rp.wizard.download_started', 'Download started'));
+  }
+
+  function copyNotes() {
+    const format = (($('rpOutputFormat') || {}).value || 'markdown').toLowerCase();
+    if (format === 'pdf' || format === 'docx') {
+      _showToast(T('rp.wizard.copy_binary_unsupported', 'Copy is not available for binary formats. Use download.'));
+      return;
+    }
+    const content = _getFinalContent();
+    if (!content) return;
+
+    navigator.clipboard.writeText(content).then(function() {
+      _showToast(T('rp.wizard.copied', 'Copied to clipboard!'));
+    }).catch(function() {
+      const ta = document.createElement('textarea');
+      ta.value = content;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      _showToast(T('rp.wizard.copied', 'Copied to clipboard!'));
+    });
+  }
+
+  // --- Internal ---
+
+  function _resetAllSteps() {
+    for (let i = 0; i < TOTAL_STEPS; i++) {
+      const step = $('rpStep' + i);
+      if (step) step.classList.remove('active');
+      const err = $('rpStep' + i + 'Error');
+      if (err) { hide(err); err.textContent = ''; }
+    }
+    hide($('rpGenerating'));
+    hide($('rpGenError'));
+    hide($('rpPreview'));
+    hide($('rpSuccess'));
+
+    // Show confirm box again
+    const confirmBox = document.querySelector('.rp-confirm-box');
+    if (confirmBox) show(confirmBox);
+
+    // Reset footer
+    show($('rpWizardFooter'));
+  }
+
+  function _updateStepUI() {
+    // Update step tabs
+    const tabs = document.querySelectorAll('.rp-wizard-step-tab');
+    tabs.forEach(function(tab) {
+      const step = parseInt(tab.getAttribute('data-step'));
+      tab.classList.toggle('active', step === currentStep);
+      tab.classList.toggle('completed', step < currentStep);
+      tab.setAttribute('aria-selected', step === currentStep ? 'true' : 'false');
+    });
+
+    // Show/hide step content
+    for (let i = 0; i < TOTAL_STEPS; i++) {
+      const el = $('rpStep' + i);
+      if (el) el.classList.toggle('active', i === currentStep);
+    }
+
+    // Update footer buttons
+    const prevBtn = $('rpBtnPrev');
+    const nextBtn = $('rpBtnNext');
+
+    if (prevBtn) {
+      if (currentStep > 0) { prevBtn.classList.remove('hidden'); prevBtn.style.display = ''; }
+      else { prevBtn.style.display = 'none'; }
+    }
+
+    if (nextBtn) {
+      if (currentStep === 1) {
+        nextBtn.textContent = T('rp.wizard.btn_generate', 'Generate Release Notes');
+        nextBtn.className = 'rp-btn primary generate';
+      } else if (currentStep === 3) {
+        nextBtn.textContent = T('rp.wizard.btn_confirm', '✓ Confirm & Export');
+        nextBtn.className = 'rp-btn primary confirm';
+      } else {
+        nextBtn.textContent = T('rp.wizard.btn_next', 'Next →');
+        nextBtn.className = 'rp-btn primary';
+      }
+    }
+
+    // Hide footer on preview step while generating, and after confirmation
+    if (currentStep === 2 && (isGenerating || !prepResult)) {
+      hide($('rpWizardFooter'));
+    } else if (isConfirmed) {
+      hide($('rpWizardFooter'));
+    } else {
+      show($('rpWizardFooter'));
+    }
+  }
+
+  async function _fetchRepoContext(repoName) {
+    try {
+      const resp = await fetch(`/api/release-pilot/repo-context/${encodeURIComponent(repoName)}`);
+      const data = await resp.json();
+      if (!data.ok) {
+        _showStepError(0, data.error || 'Failed to fetch repository context');
+        return;
+      }
+      repoContext = data;
+      _populateContext(data);
+    } catch (err) {
+      _showStepError(0, 'Network error: ' + err.message);
+    }
+  }
+
+  async function _fetchCapabilities() {
+    try {
+      const resp = await fetch('/api/release-pilot/capabilities');
+      const caps = await resp.json();
+      if (!caps.ok) return;
+
+      // Pre-select language matching current UI locale
+      const langSelect = $('rpLanguage');
+      if (langSelect) {
+        const uiLang = document.documentElement.lang || 'en';
+        if (langSelect.querySelector('option[value="' + uiLang + '"]')) {
+          langSelect.value = uiLang;
+        }
+      }
+    } catch (err) {
+      // Non-critical — capabilities fetch failure doesn't block the wizard
+    }
+  }
+
+  // Audience description hint on change
+  function _initAudienceHints() {
+    const sel = $('rpAudience');
+    const hint = $('rpAudienceHint');
+    if (!sel || !hint) return;
+    function update() {
+      const key = sel.value.replace(/-/g, '_');
+      hint.textContent = T('rp.audience.' + key + '.desc', '');
+      _updateRenderOptionsVisibility();
+    }
+    sel.addEventListener('change', update);
+    update();
+  }
+
+  // Show/hide render options based on audience
+  function _updateRenderOptionsVisibility() {
+    const audience = ($('rpAudience') || {}).value || '';
+    const ignoreOpts = ['executive_summary', 'management_brief', 'customer_narrative'];
+    const ignored = ignoreOpts.indexOf(audience) >= 0 || ignoreOpts.indexOf(audience.replace(/-/g, '_')) >= 0;
+    const container = $('rpRenderOptions');
+    const hint = $('rpRenderOptionsHint');
+    if (container) {
+      var checkboxes = container.querySelectorAll('input[type="checkbox"]');
+      for (var i = 0; i < checkboxes.length; i++) {
+        checkboxes[i].disabled = ignored;
+      }
+      container.style.opacity = ignored ? '0.5' : '1';
+    }
+    if (hint) { if (ignored) { hint.classList.remove('hidden'); hint.style.display = ''; } else { hint.style.display = 'none'; } }
+  }
+
+  // Format description hint on change
+  function _initFormatHints() {
+    const sel = $('rpOutputFormat');
+    const hint = $('rpFormatHint');
+    if (!sel || !hint) return;
+    function update() {
+      hint.textContent = T('rp.format.' + sel.value + '.desc', '');
+    }
+    sel.addEventListener('change', update);
+    update();
+  }
+
+  function _populateContext(ctx) {
+    _setText('rpCtxName', ctx.name || '—');
+    _setText('rpCtxUrl', ctx.url || '—');
+    _setText('rpCtxLayer', ctx.layer_label || ctx.layer || '—');
+    _setText('rpCtxReleaseBranch', ctx.actual_branch || ctx.expected_branch || '—');
+    _setText('rpCtxDefaultBranch', ctx.repo_default_branch || ctx.default_branch || 'main');
+    _setText('rpCtxStatus', ctx.status_label || ctx.status || '—');
+
+    // Pre-fill configure step
+    const titleInput = $('rpReleaseTitle');
+    const versionInput = $('rpReleaseVersion');
+
+    if (titleInput && !titleInput.value) {
+      titleInput.value = ctx.release_name || '';
+    }
+    if (versionInput && !versionInput.value) {
+      const yr = ctx.release_year || new Date().getFullYear();
+      const mo = String(ctx.release_month || (new Date().getMonth() + 1)).padStart(2, '0');
+      versionInput.value = `${yr}.${mo}`;
+    }
+
+    const branchInput = $('rpBranch');
+    if (branchInput && !branchInput.value) {
+      branchInput.value = ctx.actual_branch || ctx.expected_branch || '';
+    }
+  }
+
+  function _validateCurrentStep() {
+    if (currentStep === 0) {
+      // Context step: just need repo context loaded
+      if (!repoContext) {
+        _showStepError(0, T('rp.wizard.error_unsupported_state', 'Repository context not loaded.'));
+        return false;
+      }
+      return true;
+    }
+
+    if (currentStep === 1) {
+      // Configure step: validate all fields
+      let hasErrors = false;
+
+      const title = ($('rpReleaseTitle') || {}).value || '';
+      const version = ($('rpReleaseVersion') || {}).value || '';
+
+      _clearFieldError('rpReleaseTitleError');
+      _clearFieldError('rpReleaseVersionError');
+      hide($('rpStep1Error'));
+
+      if (!title.trim()) {
+        _showFieldError('rpReleaseTitleError', T('rp.validation.title_required', 'Release title is required'));
+        hasErrors = true;
+      }
+      if (!version.trim()) {
+        _showFieldError('rpReleaseVersionError', T('rp.validation.version_required', 'Release version is required'));
+        hasErrors = true;
+      } else if (!/^v?\d+(\.\d+){0,3}(-[\w.]+)?(\+[\w.]+)?$/.test(version.trim())) {
+        _showFieldError('rpReleaseVersionError', T('rp.validation.version_invalid_format', 'Invalid version format'));
+        hasErrors = true;
+      }
+
+      return !hasErrors;
+    }
+
+    if (currentStep === 2) {
+      // Preview step: need a successful result
+      return prepResult && prepResult.success;
+    }
+
+    return true;
+  }
+
+  async function _generateReleaseNotes() {
+    isGenerating = true;
+    hide($('rpPreview'));
+    hide($('rpGenError'));
+    show($('rpGenerating'));
+    hide($('rpWizardFooter'));
+
+    const payload = {
+      repo_name: repoContext.name,
+      repo_url: repoContext.url,
+      release_title: ($('rpReleaseTitle') || {}).value || '',
+      release_version: ($('rpReleaseVersion') || {}).value || '',
+      from_ref: '',
+      to_ref: 'HEAD',
+      audience: ($('rpAudience') || {}).value || 'changelog',
+      output_format: ($('rpOutputFormat') || {}).value || 'markdown',
+      app_name: repoContext.name,
+      include_authors: ($('rpIncludeAuthors') || {}).checked !== false,
+      include_hashes: ($('rpIncludeHashes') || {}).checked === true,
+      show_scope: ($('rpShowScope') || {}).checked !== false,
+      show_pr_links: ($('rpShowPrLinks') || {}).checked !== false,
+      group_by_scope: ($('rpGroupByScope') || {}).checked === true,
+      language: ($('rpLanguage') || {}).value || document.documentElement.lang || 'en',
+      accent_color: ($('rpAccentColor') || {}).value || '#FB6400',
+      branch: ($('rpBranch') || {}).value || '',
+      since_date: _computeSinceDate(),
+      additional_notes: ($('rpAdditionalNotes') || {}).value || '',
+    };
+
+    try {
+      const resp = await fetch('/api/release-pilot/prepare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+
+      isGenerating = false;
+
+      if (data.ok && data.success) {
+        prepResult = data;
+        editedContent = null;
+        _showPreview(data);
+      } else {
+        const errors = data.errors || [];
+        const errorMsg = data.error_message || errors.join(', ') || T('rp.wizard.error_desc', 'An error occurred');
+        _showGenError(errorMsg);
+      }
+    } catch (err) {
+      isGenerating = false;
+      _showGenError('Network error: ' + err.message);
+    }
+  }
+
+  function _showPreview(data) {
+    hide($('rpGenerating'));
+    hide($('rpGenError'));
+    show($('rpPreview'));
+    show($('rpWizardFooter'));
+    _updateStepUI();
+
+    // Stats
+    _setText('rpStatChanges', String(data.total_changes || 0));
+    _setText('rpStatHighlights', String((data.highlights || []).length));
+    _setText('rpStatBreaking', String((data.breaking_changes || []).length));
+
+    // Warnings
+    const warningsEl = $('rpPreviewWarnings');
+    if (warningsEl) {
+      const warnings = data.warnings || [];
+      if (warnings.length > 0) {
+        warningsEl.innerHTML = '<strong>' + T('rp.wizard.confirm_warnings', 'Warnings') + ':</strong> ' +
+          warnings.map(function(w) { return _escapeHtml(w); }).join('<br>');
+        show(warningsEl);
+      } else {
+        hide(warningsEl);
+      }
+    }
+
+    const fmt = (($('rpOutputFormat') || {}).value || 'markdown').toLowerCase();
+    const isBinary = (fmt === 'pdf' || fmt === 'docx');
+
+    if (isBinary) {
+      // Binary format — show embedded preview or download placeholder
+      hide($('rpPreviewTextWrap'));
+      show($('rpPreviewBinaryWrap'));
+
+      const descEl = $('rpPreviewDesc');
+      if (descEl) descEl.textContent = T('rp.wizard.preview_binary_desc', 'The document has been generated. Preview or download it below.');
+
+      _setText('rpBinaryFormatLabel', fmt.toUpperCase() + ' — ' + T('rp.wizard.preview_content', 'Release Notes Content'));
+
+      if (fmt === 'pdf') {
+        // Embed PDF in iframe via data URI
+        const iframe = $('rpPdfPreview');
+        const placeholder = $('rpDocxPlaceholder');
+        if (iframe) {
+          iframe.src = 'data:application/pdf;base64,' + data.content;
+          show(iframe);
+        }
+        if (placeholder) hide(placeholder);
+      } else {
+        // DOCX — no browser preview, show download placeholder
+        const iframe = $('rpPdfPreview');
+        const placeholder = $('rpDocxPlaceholder');
+        if (iframe) hide(iframe);
+        if (placeholder) show(placeholder);
+      }
+    } else {
+      // Text format — show editable text content
+      show($('rpPreviewTextWrap'));
+      hide($('rpPreviewBinaryWrap'));
+
+      const descEl = $('rpPreviewDesc');
+      if (descEl) descEl.textContent = T('rp.wizard.preview_desc', 'Review the generated release notes. You can edit them before confirming.');
+
+      const contentEl = $('rpPreviewContent');
+      if (contentEl) {
+        contentEl.textContent = data.content || T('rp.wizard.no_changes', 'No changes detected.');
+        contentEl.contentEditable = 'false';
+        contentEl.classList.remove('rp-editable');
+      }
+    }
+  }
+
+  function _showGenError(msg) {
+    hide($('rpGenerating'));
+    hide($('rpPreview'));
+    show($('rpGenError'));
+    show($('rpWizardFooter'));
+
+    const msgEl = $('rpGenErrorMsg');
+    if (msgEl) msgEl.textContent = msg;
+
+    // Show back button, hide next
+    const nextBtn = $('rpBtnNext');
+    if (nextBtn) hide(nextBtn);
+    const prevBtn = $('rpBtnPrev');
+    if (prevBtn) show(prevBtn);
+  }
+
+  function _populateConfirmation() {
+    _setText('rpConfirmRepo', repoContext ? repoContext.name : '—');
+    _setText('rpConfirmVersion', ($('rpReleaseVersion') || {}).value || '—');
+
+    const audienceVal = ($('rpAudience') || {}).value || 'changelog';
+    const audienceKey = audienceVal.replace(/-/g, '_');
+    _setText('rpConfirmAudience', T('rp.audience.' + audienceKey, audienceVal));
+
+    const formatVal = ($('rpOutputFormat') || {}).value || 'markdown';
+    _setText('rpConfirmFormat', T('rp.format.' + formatVal, formatVal));
+
+    _setText('rpConfirmChanges', String(prepResult ? prepResult.total_changes : 0));
+
+    // Warnings
+    const warningsEl = $('rpConfirmWarnings');
+    if (warningsEl && prepResult && prepResult.warnings && prepResult.warnings.length > 0) {
+      warningsEl.innerHTML = '<strong>⚠ ' + T('rp.wizard.confirm_warnings', 'Warnings') + ':</strong><br>' +
+        prepResult.warnings.map(function(w) { return _escapeHtml(w); }).join('<br>');
+      show(warningsEl);
+    } else if (warningsEl) {
+      hide(warningsEl);
+    }
+  }
+
+  function _confirmRelease() {
+    isConfirmed = true;
+
+    // Hide confirm box, show success
+    const confirmBox = document.querySelector('.rp-confirm-box');
+    if (confirmBox) hide(confirmBox);
+    hide($('rpConfirmWarnings'));
+    hide($('rpWizardFooter'));
+
+    const successEl = $('rpSuccess');
+    if (successEl) show(successEl);
+
+    // Hide "Copy to Clipboard" for binary formats
+    const copyBtn = $('rpBtnCopy');
+    if (copyBtn && _isBinaryFormat()) hide(copyBtn);
+
+    // Update success message
+    const msgEl = $('rpSuccessMsg');
+    if (msgEl && repoContext) {
+      const version = ($('rpReleaseVersion') || {}).value || '';
+      let msg = T('rp.wizard.success_desc', 'Release notes have been generated successfully.');
+      msg = msg.replace('{repo}', repoContext.name).replace('{version}', version);
+      msgEl.textContent = msg;
+    }
+  }
+
+  function _getFinalContent() {
+    if (editedContent !== null) return editedContent;
+    if (prepResult && prepResult.content) return prepResult.content;
+    const contentEl = $('rpPreviewContent');
+    return contentEl ? contentEl.innerText : '';
+  }
+
+  function _showStepError(step, msg) {
+    const el = $('rpStep' + step + 'Error');
+    if (el) {
+      el.textContent = msg;
+      show(el);
+    }
+  }
+
+  function _showFieldError(id, msg) {
+    const el = $(id);
+    if (el) {
+      el.textContent = msg;
+      el.style.display = 'block';
+      // B12: Set aria-invalid on the associated input
+      const input = el.previousElementSibling;
+      if (input && (input.tagName === 'INPUT' || input.tagName === 'SELECT' || input.tagName === 'TEXTAREA')) {
+        input.setAttribute('aria-invalid', 'true');
+      }
+    }
+  }
+
+  function _clearFieldError(id) {
+    const el = $(id);
+    if (el) {
+      el.textContent = '';
+      el.style.display = 'none';
+      const input = el.previousElementSibling;
+      if (input && (input.tagName === 'INPUT' || input.tagName === 'SELECT' || input.tagName === 'TEXTAREA')) {
+        input.removeAttribute('aria-invalid');
+      }
+    }
+  }
+
+  function _showToast(msg) {
+    const toast = $('rpToast');
+    if (!toast) return;
+    toast.textContent = msg;
+    show(toast);
+    setTimeout(function() { hide(toast); }, 2500);
+  }
+
+  function _setText(id, text) {
+    const el = $(id);
+    if (el) el.textContent = text;
+  }
+
+  function _computeSinceDate() {
+    const val = ($('rpSinceDate') || {}).value || '';
+    if (!val) return '';
+    const days = parseInt(val, 10);
+    if (isNaN(days) || days <= 0) return '';
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  }
+
+  function _escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+})();

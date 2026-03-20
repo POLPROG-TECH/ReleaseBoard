@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Pre-commit hook: runs lint and tests before allowing a commit.
+# Install: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+set -e
+
+echo "🔍 Running ruff lint..."
+python3 -m ruff check src/ tests/
+echo "✅ Lint passed"
+
+echo ""
+echo "🧪 Running tests..."
+python3 -m pytest tests/ -q --tb=short
+echo "✅ Tests passed"
+
+echo ""
+echo "🚀 All checks passed — committing."

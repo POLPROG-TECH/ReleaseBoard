@@ -1,0 +1,539 @@
+/* ============================================================
+   Release Calendar — Export, Preview & Import Extension
+   Extends window.RC with export, preview, and import functions.
+   Depends on _scripts_release_calendar.html.j2 being loaded first.
+   ============================================================ */
+(function() {
+  var I = window._RC_INTERNAL;
+  var $ = I.$, T = I.T, show = I.show, hide = I.hide;
+  var PHASES = I.PHASES, PHASE_LABELS = I.PHASE_LABELS, PHASE_COLORS = I.PHASE_COLORS;
+  var LEGACY_PHASES = I.LEGACY_PHASES, ALL_PHASES = I.ALL_PHASES, PHASE_GROUPS = I.PHASE_GROUPS;
+  var formatDate = I.formatDate, formatDateFull = I.formatDateFull, dayOfWeek = I.dayOfWeek;
+  var monthName = I.monthName, quarterOf = I.quarterOf;
+  var _esc = I._esc;
+  var _calHasData = I._calHasData, _loadFromServer = I._loadFromServer;
+  var _renderPreviewTable = I._renderPreviewTable;
+  var _detectUsedPhases = I._detectUsedPhases, _hasEnterpriseMilestones = I._hasEnterpriseMilestones;
+
+  var _pendingImportData = null;
+
+  // ======================== EXPORT ========================
+
+  function _buildExportView() {
+    var data = I._collectData();
+    var html = '';
+    if (data.events && data.events.length) {
+      html += _renderEventsPreviewTable(data);
+      if (data.months.length) html += '<div style="margin:12px 0;"></div>';
+    }
+    if (data.months.length) {
+      html += _renderPreviewTable(data);
+    }
+    $('rcExportPreview').innerHTML = html;
+    hide($('rcStep4Status'));
+  }
+
+  function _renderEventsPreviewTable(data) {
+    var sorted = data.events.slice().sort(function(a,b) { return a.date.localeCompare(b.date); });
+    var html = '<table class="rc-preview-table"><thead><tr>';
+    html += '<th scope="col" style="text-align:left;">' + T('rc.event.date', 'Date') + '</th>';
+    html += '<th scope="col">' + T('rc.event.phase', 'Phase') + '</th>';
+    html += '<th scope="col" style="text-align:left;">' + T('rc.event.label', 'Label') + '</th>';
+    html += '</tr></thead><tbody>';
+    sorted.forEach(function(evt) {
+      html += '<tr>';
+      html += '<td style="text-align:left;">' + formatDateFull(evt.date) + '</td>';
+      html += '<td class="rc-cell-' + evt.phase + '">' + PHASE_LABELS[evt.phase] + '</td>';
+      html += '<td style="text-align:left;">' + _esc(evt.label || '') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+  }
+
+  function _generateConfluenceHTML(data) {
+    var showWd = data.display.show_weekdays;
+    var showNotes = data.display.show_notes;
+    var showQ = data.display.show_quarter_headers;
+    var h = '<h2>' + _esc(data.name) + '</h2>\n';
+    if (data.notes) h += '<p><em>' + _esc(data.notes) + '</em></p>\n';
+    if (data.events && data.events.length) {
+      h += '<h3>Events</h3>\n';
+      h += '<table style="border-collapse:collapse;width:100%;font-family:sans-serif;font-size:14px;">\n';
+      h += '<thead><tr style="background:#f1f5f9;">';
+      h += '<th scope="col" style="padding:10px 14px;border:1px solid #e2e8f0;text-align:left;">Date</th>';
+      h += '<th scope="col" style="padding:10px 14px;border:1px solid #e2e8f0;text-align:center;">Phase</th>';
+      h += '<th scope="col" style="padding:10px 14px;border:1px solid #e2e8f0;text-align:left;">Label</th>';
+      h += '</tr></thead><tbody>\n';
+      data.events.slice().sort(function(a,b) { return a.date.localeCompare(b.date); }).forEach(function(evt) {
+        h += '<tr><td style="padding:10px 14px;border:1px solid #e2e8f0;">' + formatDateFull(evt.date) + '</td>';
+        h += '<td style="padding:10px 14px;border:1px solid #e2e8f0;text-align:center;color:' + PHASE_COLORS[evt.phase] + ';font-weight:700;">' + PHASE_LABELS[evt.phase] + '</td>';
+        h += '<td style="padding:10px 14px;border:1px solid #e2e8f0;">' + _esc(evt.label || '') + '</td></tr>\n';
+      });
+      h += '</tbody></table>\n';
+    }
+    if (data.months.length) {
+      if (data.events && data.events.length) h += '<h3>Monthly Schedule</h3>\n';
+      var usedP = _detectUsedPhases(data.months);
+      h += '<table style="border-collapse:collapse;width:100%;font-family:sans-serif;font-size:14px;">\n';
+      h += '<thead><tr style="background:#f1f5f9;">';
+      h += '<th scope="col" style="padding:10px 14px;border:1px solid #e2e8f0;text-align:left;font-weight:700;">' + T('rc.table.month', 'Month') + '</th>';
+      usedP.forEach(function(p) {
+        h += '<th scope="col" style="padding:10px 14px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:' + PHASE_COLORS[p] + ';border-bottom:3px solid ' + PHASE_COLORS[p] + ';">' + PHASE_LABELS[p] + '</th>';
+      });
+      if (showNotes) h += '<th scope="col" style="padding:10px 14px;border:1px solid #e2e8f0;text-align:left;font-weight:700;">' + T('rc.table.notes', 'Notes') + '</th>';
+      h += '</tr></thead>\n<tbody>\n';
+      var prevQ = 0;
+      data.months.forEach(function(m) {
+        var q = quarterOf(m.month);
+        if (showQ && q !== prevQ) {
+          h += '<tr><td colspan="' + (usedP.length + 1 + (showNotes ? 1 : 0)) + '" style="padding:8px 14px;background:#f8fafc;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#64748b;border:1px solid #e2e8f0;">Q' + q + ' ' + data.year + '</td></tr>\n';
+          prevQ = q;
+        }
+        h += '<tr><td style="padding:10px 14px;border:1px solid #e2e8f0;font-weight:600;">' + monthName(m.month) + '</td>';
+        usedP.forEach(function(p) {
+          var val = m.phases[p];
+          var display = val ? formatDate(val) : '\u2014';
+          if (showWd && val) display += ' <small style="color:#94a3b8;">' + dayOfWeek(val) + '</small>';
+          var bgColor = val ? (PHASE_COLORS[p] + '18') : 'transparent';
+          h += '<td style="padding:10px 14px;border:1px solid #e2e8f0;text-align:center;background:' + bgColor + ';">' + display + '</td>';
+        });
+        if (showNotes) h += '<td style="padding:10px 14px;border:1px solid #e2e8f0;font-size:13px;color:#64748b;font-style:italic;">' + _esc(m.notes || '') + '</td>';
+        h += '</tr>\n';
+      });
+      h += '</tbody></table>\n';
+    }
+    h += '<p style="font-size:11px;color:#94a3b8;margin-top:8px;">Generated by ReleaseBoard \u2022 ' + new Date().toLocaleDateString() + '</p>';
+    return h;
+  }
+
+  function _generateWikiMarkup(data) {
+    var showNotes = data.display.show_notes;
+    var showQ = data.display.show_quarter_headers;
+    var lines = [];
+    lines.push('h2. ' + data.name);
+    if (data.notes) lines.push('_' + data.notes + '_');
+    lines.push('');
+    if (data.events && data.events.length) {
+      lines.push('|| Date || Phase || Label ||');
+      data.events.slice().sort(function(a,b){return a.date.localeCompare(b.date);}).forEach(function(evt) {
+        lines.push('| ' + formatDateFull(evt.date) + ' | *' + PHASE_LABELS[evt.phase] + '* | ' + (evt.label || '') + ' |');
+      });
+      lines.push('');
+    }
+    if (data.months.length) {
+      var usedP = _detectUsedPhases(data.months);
+      var header = '|| ' + T('rc.table.month', 'Month') + ' ||';
+      usedP.forEach(function(p) { header += ' ' + PHASE_LABELS[p] + ' ||'; });
+      if (showNotes) header += ' ' + T('rc.table.notes', 'Notes') + ' ||';
+      lines.push(header);
+      var prevQ = 0;
+      data.months.forEach(function(m) {
+        var q = quarterOf(m.month);
+        if (showQ && q !== prevQ) {
+          lines.push('|| Q' + q + ' ' + data.year + ' ||' + usedP.map(function(){ return ' ||'; }).join('') + (showNotes ? ' ||' : ''));
+          prevQ = q;
+        }
+        var row = '| *' + monthName(m.month) + '* |';
+        usedP.forEach(function(p) {
+          var val = m.phases[p] ? formatDate(m.phases[p]) : '\u2014';
+          row += ' ' + val + ' |';
+        });
+        if (showNotes) row += ' _' + (m.notes || '') + '_ |';
+        lines.push(row);
+      });
+    }
+    return lines.join('\n');
+  }
+
+  function copyConfluenceHTML() {
+    var data = I._collectData();
+    _copyRichText(_generateConfluenceHTML(data));
+    _showExportStatus(T('rc.export.copied_html', 'HTML copied to clipboard!'));
+  }
+
+  function copyConfluenceWiki() {
+    var data = I._collectData();
+    _copyPlainText(_generateWikiMarkup(data));
+    _showExportStatus(T('rc.export.copied_wiki', 'Wiki markup copied to clipboard!'));
+  }
+
+  function downloadHTML() {
+    var data = I._collectData();
+    var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + _esc(data.name) + '</title></head><body style="font-family:sans-serif;padding:40px;max-width:1000px;margin:0 auto;">\n';
+    html += _generateConfluenceHTML(data);
+    html += '</body></html>';
+    var blob = new Blob([html], { type: 'text/html' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = (data.name || 'release-calendar').replace(/[^a-zA-Z0-9_-]/g, '_') + '.html';
+    a.click();
+    URL.revokeObjectURL(url);
+    _showExportStatus(T('rc.export.downloaded', 'HTML file downloaded!'));
+  }
+
+  function saveToConfig(autoCloseAndReload) {
+    var data = I._collectData();
+    var btn = I.$('rcBtnNext');
+    if (autoCloseAndReload && btn) { btn.disabled = true; btn.textContent = '...'; }
+    fetch('/api/release-calendar', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: data.name, year: data.year, notes: data.notes, months: data.months, events: data.events, display: data.display })
+    }).then(function(r) { return r.json(); }).then(function(resp) {
+      if (resp.ok) {
+        _showExportStatus(T('rc.export.saved', 'Calendar saved to configuration!'));
+        if (autoCloseAndReload) { setTimeout(function(){ location.reload(); }, 400); }
+      } else {
+        _showExportStatus(T('rc.export.save_error', 'Failed to save: ') + (resp.errors || []).join(', '), true);
+        if (autoCloseAndReload && btn) { btn.disabled = false; btn.textContent = T('ui.config.save_close', 'Save & Close'); }
+      }
+    }).catch(function() {
+      _showExportStatus(T('rc.export.save_error', 'Failed to save calendar'), true);
+      if (autoCloseAndReload && btn) { btn.disabled = false; btn.textContent = T('ui.config.save_close', 'Save & Close'); }
+    });
+  }
+
+  function _showExportStatus(msg, isError) {
+    var el = $('rcStep4Status');
+    if (!el) return;
+    el.className = 'rc-validation-msg ' + (isError ? 'error' : 'success');
+    el.textContent = (isError ? '\u2717 ' : '\u2713 ') + msg;
+    show(el);
+    if (!isError) setTimeout(function() { hide(el); }, 4000);
+  }
+
+  function _copyRichText(html) {
+    try {
+      var blob = new Blob([html], { type: 'text/html' });
+      var item = new ClipboardItem({ 'text/html': blob, 'text/plain': new Blob([html], { type: 'text/plain' }) });
+      navigator.clipboard.write([item]);
+    } catch(e) { _copyPlainText(html); }
+  }
+
+  function _copyPlainText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text);
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+  }
+
+  // ======================== PREVIEW MODAL ========================
+
+  function openPreview() {
+    _loadFromServer().then(function(existing) {
+      var content = $('rcPreviewContent');
+      if (!content) return;
+      if (!existing || !existing.release_calendar || !_calHasData(existing.release_calendar)) {
+        content.innerHTML = '<div class="rc-empty-preview">' +
+          '<div class="rc-empty-preview-icon">\ud83d\udcc5</div>' +
+          '<p class="rc-empty-preview-title">' + T('rc.view.no_calendar', 'No release calendar configured yet.') + '</p>' +
+          '<p class="rc-empty-preview-hint">' + T('rc.view.create_hint', 'Use the calendar wizard or import a JSON file to get started.') + '</p></div>';
+      } else {
+        var cal = existing.release_calendar;
+        var html = '<div class="rc-preview-info">';
+        html += '<h3 class="rc-preview-heading">' + _esc(cal.name || T('rc.view.title', 'Release Calendar')) + '</h3>';
+        if (cal.notes) html += '<p class="rc-preview-notes"><em>' + _esc(cal.notes) + '</em></p>';
+        html += '</div>';
+        html += _renderMilestoneSummary(cal);
+        if (cal.events && cal.events.length) {
+          html += '<h4 class="rc-sub-heading">' + T('rc.view.events_tab', 'Events') + ' (' + cal.events.length + ')</h4>';
+          html += '<table class="rc-preview-table"><thead><tr>';
+          html += '<th scope="col" style="text-align:left;">' + T('rc.event.date', 'Date') + '</th>';
+          html += '<th scope="col">' + T('rc.event.phase', 'Phase') + '</th>';
+          html += '<th scope="col" style="text-align:left;">' + T('rc.event.label', 'Label') + '</th></tr></thead><tbody>';
+          cal.events.slice().sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}).forEach(function(evt) {
+            html += '<tr><td style="text-align:left;">' + formatDateFull(evt.date) + ' <small style="opacity:.6">' + dayOfWeek(evt.date) + '</small></td>';
+            html += '<td class="rc-cell-' + evt.phase + '">' + PHASE_LABELS[evt.phase || 'dev'] + '</td>';
+            html += '<td style="text-align:left;">' + _esc(evt.label || '') + '</td></tr>';
+          });
+          html += '</tbody></table>';
+        }
+        if (cal.months && cal.months.length) {
+          html += '<h4 class="rc-sub-heading">' + T('rc.view.monthly_tab', 'Monthly View') + ' (' + cal.months.length + ')</h4>';
+          html += _renderPreviewTable({ name: cal.name || '', year: cal.year || new Date().getFullYear(), months: cal.months, display: cal.display || { show_weekdays: true, show_notes: true, show_quarter_headers: true } });
+        }
+        content.innerHTML = html;
+      }
+      var overlay = $('rcPreviewOverlay');
+      if (overlay) { overlay.classList.add('active'); document.body.style.overflow = 'hidden'; }
+    });
+  }
+
+  function closePreview() {
+    var overlay = $('rcPreviewOverlay');
+    if (overlay) { overlay.classList.remove('active'); document.body.style.overflow = ''; }
+  }
+
+  function _renderMilestoneSummary(cal) {
+    var today = new Date(); today.setHours(0,0,0,0);
+    var phases = {};
+    function pickBest(phase, dateStr) {
+      if (!dateStr) return;
+      var d = new Date(dateStr + 'T00:00:00');
+      if (isNaN(d.getTime())) return;
+      if (!phases[phase]) { phases[phase] = dateStr; return; }
+      var existing = new Date(phases[phase] + 'T00:00:00');
+      var dFut = d >= today, eFut = existing >= today;
+      if (dFut && eFut) { if (d < existing) phases[phase] = dateStr; }
+      else if (dFut && !eFut) { phases[phase] = dateStr; }
+      else if (!dFut && !eFut) { if (d > existing) phases[phase] = dateStr; }
+    }
+    if (cal.events) cal.events.forEach(function(evt) { if (evt.date && evt.phase) pickBest(evt.phase, evt.date); });
+    var usedP = cal.months ? _detectUsedPhases(cal.months) : PHASES;
+    if (cal.months) cal.months.forEach(function(m) {
+      if (m.phases) usedP.forEach(function(p) { if (m.phases[p]) pickBest(p, m.phases[p]); });
+    });
+    var filled = ALL_PHASES.filter(function(p) { return phases[p]; });
+    if (!filled.length) return '';
+    var html = '<div class="rc-timeline-legend">';
+    filled.forEach(function(p) {
+      var d = phases[p];
+      var diff = Math.round((new Date(d + 'T00:00:00') - today) / 86400000);
+      var countdown;
+      if (diff === 0) countdown = '<span class="env-countdown today">' + T('rc.milestone.today','today') + '</span>';
+      else if (diff > 0) countdown = '<span class="env-countdown future">' + T('rc.milestone.in_days','in {n} days').replace('{n}', diff) + '</span>';
+      else countdown = '<span class="env-countdown past">' + T('rc.milestone.ago_days','{n} days ago').replace('{n}', Math.abs(diff)) + '</span>';
+      html += '<div class="rc-timeline-legend-item">';
+      html += '<span class="rc-timeline-legend-dot" style="background:' + PHASE_COLORS[p] + ';"></span>';
+      html += '<span class="rc-timeline-legend-label">' + PHASE_LABELS[p] + '</span>';
+      html += '<span class="rc-timeline-legend-date">' + d + '</span>';
+      html += countdown + '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  // ======================== IMPORT MODAL ========================
+
+  function openImport() {
+    _pendingImportData = null;
+    var status = $('rcImportStatus');
+    if (status) { status.style.display = 'none'; status.innerHTML = ''; }
+    hide($('rcImportConfirm'));
+    var overlay = $('rcImportOverlay');
+    if (overlay) { overlay.classList.add('active'); document.body.style.overflow = 'hidden'; }
+    _loadImportSchema();
+    _setupDropzone();
+  }
+
+  function closeImport() {
+    var overlay = $('rcImportOverlay');
+    if (overlay) { overlay.classList.remove('active'); document.body.style.overflow = ''; }
+    _pendingImportData = null;
+  }
+
+  function _setupDropzone() {
+    var dz = $('rcImportDropzone');
+    if (!dz || dz._rcSetup) return;
+    dz._rcSetup = true;
+    dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', function() { dz.classList.remove('drag-over'); });
+    dz.addEventListener('drop', function(e) {
+      e.preventDefault(); dz.classList.remove('drag-over');
+      if (e.dataTransfer.files.length) _processImportFile(e.dataTransfer.files[0]);
+    });
+  }
+
+  function handleImportFile(event) {
+    if (event.target.files.length) _processImportFile(event.target.files[0]);
+    event.target.value = '';
+  }
+
+  function _processImportFile(file) {
+    var status = $('rcImportStatus');
+    hide($('rcImportConfirm'));
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      status.innerHTML = '<div class="rc-validation-msg error rc-validation-msg-block">\u2717 ' + T('rc.import.wrong_format', 'Only .json files are accepted') + '</div>';
+      status.style.display = 'block'; return;
+    }
+    if (file.size === 0) {
+      status.innerHTML = '<div class="rc-validation-msg error rc-validation-msg-block">\u2717 ' + T('rc.import.empty_file', 'File is empty') + '</div>';
+      status.style.display = 'block'; return;
+    }
+    status.innerHTML = '<div class="rc-validation-msg warning rc-validation-msg-block">\u23f3 ' + T('rc.import.validating', 'Validating...') + '</div>';
+    status.style.display = 'block';
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var parsed;
+      try { parsed = JSON.parse(e.target.result); } catch(err) {
+        status.innerHTML = '<div class="rc-validation-msg error rc-validation-msg-block">\u2717 ' + T('rc.import.parse_error', 'Failed to parse JSON file') + ': ' + _esc(err.message) + '</div>';
+        return;
+      }
+      var payload = parsed.release_calendar || parsed;
+      fetch('/api/release-calendar/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ release_calendar: payload })
+      }).then(function(r) { return r.json(); }).then(function(resp) {
+        if (resp.ok) {
+          status.innerHTML = '<div class="rc-validation-msg success rc-validation-msg-block">\u2713 ' + T('rc.import.success', 'Calendar imported successfully!') +
+            ' (' + (resp.imported_events || 0) + ' ' + T('rc.import.imported_events', 'events imported') +
+            ', ' + (resp.imported_months || 0) + ' ' + T('rc.import.imported_months', 'months imported') + ')</div>';
+          _pendingImportData = null;
+        } else if (resp.needs_confirmation) {
+          _pendingImportData = payload;
+          status.innerHTML = ''; status.style.display = 'none';
+          show($('rcImportConfirm'));
+        } else if (resp.validation_failed) {
+          var errHtml = '<div class="rc-validation-msg error rc-validation-msg-block"><strong>\u2717 ' + T('rc.import.invalid', 'Invalid JSON \u2014 see errors below') + '</strong>';
+          errHtml += '<ul class="rc-import-error-list">';
+          (resp.errors || []).forEach(function(err) { errHtml += '<li>' + _esc(err) + '</li>'; });
+          errHtml += '</ul></div>';
+          status.innerHTML = errHtml;
+        } else {
+          status.innerHTML = '<div class="rc-validation-msg error rc-validation-msg-block">\u2717 ' + T('rc.import.error', 'Import failed') + ': ' + _esc((resp.errors || []).join(', ')) + '</div>';
+        }
+      }).catch(function() {
+        status.innerHTML = '<div class="rc-validation-msg error rc-validation-msg-block">\u2717 ' + T('rc.import.error', 'Import failed') + '</div>';
+      });
+    };
+    reader.readAsText(file);
+  }
+
+  function confirmImportReplace() {
+    if (!_pendingImportData) return;
+    var status = $('rcImportStatus');
+    hide($('rcImportConfirm'));
+    status.innerHTML = '<div class="rc-validation-msg warning rc-validation-msg-block">\u23f3 ' + T('rc.import.validating', 'Validating...') + '</div>';
+    status.style.display = 'block';
+    fetch('/api/release-calendar/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ release_calendar: _pendingImportData, confirm_replace: true })
+    }).then(function(r) { return r.json(); }).then(function(resp) {
+      if (resp.ok) {
+        status.innerHTML = '<div class="rc-validation-msg success rc-validation-msg-block">\u2713 ' + T('rc.import.success', 'Calendar imported successfully!') +
+          ' (' + (resp.imported_events || 0) + ' ' + T('rc.import.imported_events', 'events imported') +
+          ', ' + (resp.imported_months || 0) + ' ' + T('rc.import.imported_months', 'months imported') + ')</div>';
+        _pendingImportData = null;
+      } else {
+        status.innerHTML = '<div class="rc-validation-msg error rc-validation-msg-block">\u2717 ' + T('rc.import.error', 'Import failed') + ': ' + _esc((resp.errors || []).join(', ')) + '</div>';
+      }
+    }).catch(function() {
+      status.innerHTML = '<div class="rc-validation-msg error rc-validation-msg-block">\u2717 ' + T('rc.import.error', 'Import failed') + '</div>';
+    });
+  }
+
+  function cancelImportReplace() {
+    _pendingImportData = null;
+    hide($('rcImportConfirm'));
+  }
+
+  function _loadImportSchema() {
+    var display = $('rcSchemaDisplay');
+    var exampleDisplay = $('rcExampleDisplay');
+    if (!display || display._loaded) return;
+    display._loaded = true;
+    fetch('/api/release-calendar/schema').then(function(r) { return r.json(); }).then(function(resp) {
+      if (resp.ok) {
+        display.textContent = JSON.stringify(resp.schema, null, 2);
+        if (exampleDisplay) {
+          var pre = document.createElement('pre');
+          pre.style.cssText = 'margin:0;white-space:pre-wrap;word-break:break-word;';
+          pre.textContent = JSON.stringify(resp.example, null, 2);
+          exampleDisplay.appendChild(pre);
+        }
+      }
+    }).catch(function() {});
+  }
+
+  function toggleImportSchema() {
+    _loadImportSchema();
+    var content = $('rcSchemaContent');
+    var btn = $('rcSchemaToggle');
+    if (content.style.display === 'none') {
+      content.style.display = ''; btn.textContent = T('rc.import.hide_schema', 'Hide JSON format');
+    } else {
+      content.style.display = 'none'; btn.textContent = T('rc.import.show_schema', 'Show expected JSON format');
+    }
+  }
+
+  function toggleImportExample() {
+    _loadImportSchema();
+    var wrapper = $('rcExampleContent');
+    var btn = $('rcExampleToggle');
+    if (!wrapper) return;
+    if (wrapper.style.display === 'none') {
+      wrapper.style.display = ''; btn.textContent = T('rc.import.hide_example', 'Hide example');
+    } else {
+      wrapper.style.display = 'none'; btn.textContent = T('rc.import.show_example', 'Show example');
+    }
+  }
+
+  // ======================== REGISTER ON RC ========================
+
+  Object.assign(window.RC, {
+    copyConfluenceHTML: copyConfluenceHTML,
+    copyConfluenceWiki: copyConfluenceWiki,
+    downloadHTML: downloadHTML,
+    saveToConfig: saveToConfig,
+    openPreview: openPreview,
+    closePreview: closePreview,
+    openImport: openImport,
+    closeImport: closeImport,
+    handleImportFile: handleImportFile,
+    confirmImportReplace: confirmImportReplace,
+    cancelImportReplace: cancelImportReplace,
+    toggleImportSchema: toggleImportSchema,
+    toggleImportExample: toggleImportExample,
+    _buildExportView: _buildExportView
+  });
+
+  // ======================== AUTO RENDER DASHBOARD CALENDAR ========================
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      var view = document.getElementById('rcDashboardView');
+      var container = document.getElementById('rcDashboardTable');
+      var title = document.getElementById('rcDashboardTitle');
+      if (!view || !container) return;
+      
+      I._loadFromServer().then(function(existing) {
+        if (existing && existing.release_calendar && I._calHasData(existing.release_calendar)) {
+          var cal = existing.release_calendar;
+          if (title && cal.name) title.textContent = cal.name;
+          
+          var html = '';
+          if (cal.months && cal.months.length) {
+            html += I._renderPreviewTable({
+              name: cal.name || '', 
+              year: cal.year || new Date().getFullYear(),
+              months: cal.months,
+              display: cal.display || { show_weekdays: true, show_notes: true, show_quarter_headers: true }
+            });
+          } else if (cal.events && cal.events.length) {
+            html += '<div class="note-item" style="padding:1rem;color:var(--text-secondary);">' + cal.events.length + ' events scheduled.</div>';
+          }
+          
+          container.innerHTML = html;
+          view.classList.remove('hidden');
+
+          // Update toolbar drop downs context iteratively
+          var btnPlan = I.$('btnReleaseCalendar');
+          if (btnPlan) {
+            btnPlan.innerHTML = '✏️ <span data-i18n="rc.toolbar.edit_calendar">Edit Calendar</span>';
+          }
+          var btnEdit = I.$('btnEditCalendar');
+          var btnDel = I.$('btnDeleteCalendar');
+          var sepEdit = I.$('rcEditSep');
+          var lblManage = I.$('rcManageLabel');
+          if (btnEdit) btnEdit.classList.remove('hidden');
+          if (btnDel) btnDel.classList.remove('hidden');
+          if (sepEdit) sepEdit.classList.remove('hidden');
+          if (lblManage) lblManage.classList.remove('hidden');
+
+          // Apply translations to dynamic content if hot-swapper available
+          if (typeof localizeDirect === 'function') {
+            localizeDirect();
+          }
+        }
+      });
+    }, 100);
+  });
+
+})();

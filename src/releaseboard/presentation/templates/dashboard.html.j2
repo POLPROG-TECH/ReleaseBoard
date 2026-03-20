@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="{{ vm.locale }}" data-theme="{{ vm.theme }}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ vm.title }} — {{ vm.release_name }}</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 112 120' fill='none'><defs><linearGradient id='bg' x1='0' y1='0' x2='120' y2='120' gradientUnits='userSpaceOnUse'><stop offset='0%25' stop-color='%23fb6400'/><stop offset='100%25' stop-color='%23e55500'/></linearGradient></defs><rect x='8' y='12' width='96' height='96' rx='20' fill='url(%23bg)'/><path d='M40 36 L40 64 Q40 76 52 76 L72 76' stroke='%23fff' stroke-width='5' stroke-linecap='round' fill='none'/><path d='M40 48 Q40 56 50 56 L62 56' stroke='%23fff' stroke-width='5' stroke-linecap='round' fill='none'/><circle cx='40' cy='36' r='5' fill='%23fff'/><circle cx='72' cy='76' r='5' fill='%23fff'/><circle cx='62' cy='56' r='5' fill='%23fff'/></svg>">
+<style>
+{% include '_styles.html.j2' %}
+{% include '_styles_midnight.html.j2' %}
+{% include '_styles_release_wizard.html.j2' %}
+{% include '_styles_release_calendar.html.j2' %}
+</style>
+{% include '_styles_toolbar.html.j2' %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+{% include '_head_scripts.html.j2' %}
+</head>
+<body>
+<a class="skip-link" href="#dashboardContent" data-i18n="ui.aria.skip_to_content">Skip to content</a>
+{% include '_header.html.j2' %}
+{% include '_dashboard_content.html.j2' %}
+{% include '_modals.html.j2' %}
+{% include '_release_wizard.html.j2' %}
+{% include '_release_calendar_wizard.html.j2' %}
+{% include '_config_drawer.html.j2' %}
+{% include '_footer.html.j2' %}
+{% include '_quick_settings.html.j2' %}
+{% include '_scripts.html.j2' %}
+</body>
+</html>

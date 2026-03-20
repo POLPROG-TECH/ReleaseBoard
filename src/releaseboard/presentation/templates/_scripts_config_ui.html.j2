@@ -1,0 +1,502 @@
+  /* --- Drawer --- */
+  var _drawerTrapRelease = null;
+  function toggleDrawer(){
+    if(drawerOpen && _hasUnsavedChanges){
+      showModal({
+        title: _t('ui.config.unsaved_title'),
+        desc: _t('ui.config.unsaved_close_warning'),
+        buttons: [
+          { label: 'Save & Close', cls:'primary', onClick: function(){ closeModal(); RB.saveConfig(); } },
+          { label: _t('ui.config.discard_close'), cls:'danger', onClick: function(){ closeModal(); _hasUnsavedChanges=false; updateUnsavedBadge(false); if (_drawerSnapshot) draft = JSON.parse(_drawerSnapshot); populateForm(); updateJsonEditor(); RB.closeDrawer(); } },
+          { label: _t('ui.cancel'), cls:'cancel', onClick: function(){ closeModal(); } }
+        ]
+      });
+      return;
+    }
+    drawerOpen = !drawerOpen;
+    document.getElementById('configDrawer').classList.toggle('open', drawerOpen);
+    document.getElementById('drawerOverlay').classList.toggle('active', drawerOpen);
+    if(drawerOpen){ _drawerSnapshot = JSON.stringify(cleanDraft(draft)); populateForm(); updateJsonEditor(); validateDraft(); if(typeof trapFocus==='function'){setTimeout(function(){_drawerTrapRelease=trapFocus(document.getElementById('configDrawer'))},50);} }
+  }
+  function closeDrawer(){ drawerOpen=false; document.getElementById('configDrawer').classList.remove('open'); document.getElementById('drawerOverlay').classList.remove('active'); if(_drawerTrapRelease){_drawerTrapRelease();_drawerTrapRelease=null;} }
+  function switchTab(tab){
+    currentTab=tab;
+    document.querySelectorAll('.drawer-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
+    document.getElementById('tabForm').classList.toggle('hidden',tab!=='form');
+    document.getElementById('tabJson').classList.toggle('hidden',tab!=='json');
+    document.getElementById('tabEffective').classList.toggle('hidden',tab!=='effective');
+    // Clear validation panel on tab switch to avoid stale messages
+    const panel = document.getElementById('validationPanel');
+    panel.innerHTML = '';
+    panel.classList.add('clean');
+    if(tab==='json') { updateJsonEditor(); validateJsonEditor(draft); }
+    if(tab==='form') { populateForm(); validateDraft(); }
+    if(tab==='effective') renderEffectiveTab();
+  }
+
+  /* --- Draft snapshot for change detection --- */
+  let _drawerSnapshot = null;
+  function isRepoChanged(idx){
+    if(!_drawerSnapshot) return false;
+    try {
+      const saved = JSON.parse(_drawerSnapshot);
+      const savedRepo = saved.repositories && saved.repositories[idx];
+      const currRepo = draft.repositories && draft.repositories[idx];
+      if(!savedRepo && currRepo) return true;
+      if(!currRepo) return false;
+      return JSON.stringify(cleanDraft({r:savedRepo})) !== JSON.stringify(cleanDraft({r:currRepo}));
+    } catch(e){ return false; }
+  }
+  function isLayerChanged(layerId){
+    if(!_drawerSnapshot) return false;
+    try {
+      const saved = JSON.parse(_drawerSnapshot);
+      const savedL = (saved.layers||[]).find(l=>l.id===layerId);
+      const currL = (draft.layers||[]).find(l=>l.id===layerId);
+      if(!savedL && currL) return true;
+      if(!currL) return false;
+      return JSON.stringify(savedL) !== JSON.stringify(currL);
+    } catch(e){ return false; }
+  }
+
+  /* --- Form ↔ Draft sync --- */
+  function getPath(obj, path){
+    return path.split('.').reduce((o,k)=>o&&o[k], obj);
+  }
+  function setPath(obj, path, val){
+    const keys = path.split('.');
+    let cur = obj;
+    for(let i=0;i<keys.length-1;i++){
+      if(!cur[keys[i]]) cur[keys[i]] = {};
+      cur = cur[keys[i]];
+    }
+    cur[keys[keys.length-1]] = val;
+  }
+
+  function populateForm(){
+    if(!draft) return;
+    document.querySelectorAll('[data-path]').forEach(el=>{
+      const val = getPath(draft, el.dataset.path);
+      if(val !== undefined && val !== null){
+        if(el.type==='number') el.value = val;
+        else el.value = val;
+      } else {
+        el.value = '';
+      }
+    });
+    // Set dynamic min for target year to current year
+    const tyEl = document.querySelector('[data-path="release.target_year"]');
+    if(tyEl) tyEl.min = new Date().getFullYear();
+    renderLayers();
+    renderRepos();
+  }
+
+  function readForm(){
+    const intPaths = new Set(['release.target_month','release.target_year','settings.stale_threshold_days','settings.timeout_seconds','settings.max_concurrent']);
+    document.querySelectorAll('#tabForm [data-path]').forEach(el=>{
+      let val = el.value;
+      if(el.type==='number' || intPaths.has(el.dataset.path)){
+        const n = parseInt(val, 10);
+        val = isNaN(n) ? 0 : n;
+      }
+      if(el.tagName==='SELECT' && intPaths.has(el.dataset.path)){
+        const n = parseInt(val, 10);
+        val = isNaN(n) ? val : n;
+      }
+      setPath(draft, el.dataset.path, val);
+    });
+  }
+
+  // Debounced form change handler for real-time validation
+  let formTimer = null;
+  document.addEventListener('input', e=>{
+    if(e.target.dataset && e.target.dataset.path){
+      clearTimeout(formTimer);
+      formTimer = setTimeout(()=>{ readForm(); validateDraft(); }, 300);
+    }
+  });
+
+  // Immediate validation on blur (leaving a field)
+  document.addEventListener('focusout', e=>{
+    if(e.target.dataset && e.target.dataset.path){
+      clearTimeout(formTimer);
+      readForm(); validateDraft();
+    }
+  });
+
+  function updateJsonEditor(){
+    document.getElementById('jsonEditor').value = JSON.stringify(draft, null, 2);
+  }
+
+  document.getElementById('jsonEditor')?.addEventListener('input', function(){
+    clearTimeout(formTimer);
+    const editor = this;
+    formTimer = setTimeout(async ()=>{
+      try{
+        draft = JSON.parse(editor.value);
+        editor.classList.remove('error');
+        populateForm();
+        // Run schema validation
+        await validateJsonEditor(draft);
+        validateDraft();
+      }catch(e){
+        editor.classList.add('error');
+        showJsonParseError(e.message);
+      }
+    }, 500);
+  });
+
+  /* --- Layers list --- */
+  function renderLayers(){
+    const layers = draft.layers || [];
+    const globalRoot = (draft.settings && draft.settings.repository_root_url) || '';
+    const globalBranch = (draft.release && draft.release.branch_pattern) || 'release/{YYYY}.{MM}';
+    const container = document.getElementById('layersList');
+    // Preserve open accordion state before re-render
+    const openIds = new Set();
+    if(container) container.querySelectorAll('.cfg-list-item.layer-open').forEach(el=>{
+      const idSpan = el.querySelector('.layer-id');
+      if(idSpan) openIds.add(idSpan.textContent);
+    });
+    container.innerHTML = layers.map((l,i)=>{
+      const effectiveRoot = l.repository_root_url || globalRoot || '(none)';
+      const effectiveBranch = l.branch_pattern || globalBranch;
+      const branchInherited = !l.branch_pattern;
+      const branchTag = branchInherited
+        ? '<span class="inherited-tag">'+_t('ui.config.inherited_from_global')+'</span>'
+        : '<span class="override-tag">'+_t('ui.config.layer_override')+'</span><button class="reset-inherit-btn" onclick="event.stopPropagation();RB.resetLayerBranch('+i+')">'+_t('ui.config.reset_to_inherited')+'</button>';
+      return `
+      <div class="cfg-list-item cfg-list-item-border" style="border-left-color:${l.color||'#6366F1'};">
+        <div class="cfg-layer-badge" onclick="RB.toggleLayerCollapse(this.parentElement)">
+          <span class="layer-chevron">\u25b6</span>
+          <span class="layer-dot" style="background:${l.color||'#6366F1'};"></span>
+          ${esc(l.label||l.id)}
+          <span class="layer-id">${esc(l.id||'')}</span>
+        </div>
+        <button class="remove-btn" onclick="RB.removeLayer(${i})">✕</button>
+        <div class="cfg-list-item-body">
+        <div class="cfg-row">
+          <div class="cfg-field"><label class="cfg-label">ID</label><input class="cfg-input text-mono" data-path="layers.${i}.id" value="${l.id||''}" readonly></div>
+          <div class="cfg-field"><label class="cfg-label">Label</label><input class="cfg-input" data-path="layers.${i}.label" value="${l.label||''}" onchange="RB.updateLayer(${i},'label',this.value);RB.renderLayers();RB.renderRepos()"></div>
+        </div>
+        <div class="cfg-row">
+          <div class="cfg-field"><label class="cfg-label">Branch Pattern</label><input class="cfg-input text-mono${branchInherited ? ' cfg-inherited' : ''}" data-path="layers.${i}.branch_pattern" value="${l.branch_pattern || globalBranch}" placeholder="(uses global: ${esc(globalBranch)})" oninput="RB.onLayerBranchInput(${i},this)" onchange="RB.updateLayer(${i},'branch_pattern',this.value||undefined);RB.renderLayers();RB.renderRepos()"><div class="effective-value">\u2192 ${esc(effectiveBranch)} ${branchTag}</div></div>
+          <div class="cfg-field cfg-flex-auto"><label class="cfg-label">Color</label><input class="cfg-input cfg-color" data-path="layers.${i}.color" type="color" value="${l.color||'#4F46E5'}" onchange="RB.updateLayer(${i},'color',this.value);RB.renderLayers()"></div>
+          <div class="cfg-field cfg-flex-72"><label class="cfg-label">Order</label><input class="cfg-input" data-path="layers.${i}.order" type="number" min="0" value="${l.order||i}" onchange="RB.updateLayer(${i},'order',Math.max(0,parseInt(this.value)||0))"></div>
+        </div>
+        <div class="cfg-field">
+          <label class="cfg-label">Repository Root URL</label><span class="cfg-tooltip-trigger" tabindex="0" data-tooltip="${esc(_t('ui.config.repo_root_url_tooltip'))}">?</span>
+          <input class="cfg-input text-mono" data-path="layers.${i}.repository_root_url" value="${l.repository_root_url||''}" placeholder="(uses global root)" onchange="RB.updateLayer(${i},'repository_root_url',this.value||undefined)">
+          <div class="cfg-help">${_t('ui.config.repo_root_url_formats')}</div>
+          <div class="effective-value">\u2192 ${esc(effectiveRoot)}</div>
+        </div>
+        </div>
+      </div>`;
+    }).join('');
+    // Restore open accordion state after re-render
+    openIds.forEach(id=>{
+      container.querySelectorAll('.cfg-list-item').forEach(el=>{
+        const idSpan = el.querySelector('.layer-id');
+        if(idSpan && idSpan.textContent === id) el.classList.add('layer-open');
+      });
+    });
+  }
+  function updateLayer(i,k,v){ if(!draft.layers)draft.layers=[]; draft.layers[i][k]=v; validateDraft(); }
+  function onLayerBranchInput(idx, inputEl){
+    updateLayer(idx, 'branch_pattern', inputEl.value || undefined);
+    const globalBranch = (draft.release && draft.release.branch_pattern) || 'release/{YYYY}.{MM}';
+    const effectiveBranch = inputEl.value || globalBranch;
+    const tag = inputEl.value
+      ? '<span class="override-tag">'+_t('ui.config.layer_override')+'</span><button class="reset-inherit-btn" onclick="RB.resetLayerBranch('+idx+')">'+_t('ui.config.reset_to_inherited')+'</button>'
+      : '<span class="inherited-tag">'+_t('ui.config.inherited_from_global')+'</span>';
+    const effDiv = inputEl.parentElement.querySelector('.effective-value');
+    if(effDiv) effDiv.innerHTML = '\u2192 ' + esc(effectiveBranch) + ' ' + tag;
+    if(inputEl.value){ inputEl.classList.remove('cfg-inherited'); } else { inputEl.classList.add('cfg-inherited'); }
+    renderRepos();
+  }
+  function resetLayerBranch(idx){
+    if(!draft.layers || !draft.layers[idx]) return;
+    delete draft.layers[idx].branch_pattern;
+    renderLayers();
+    renderRepos();
+    validateDraft();
+  }
+  function addLayer(){ if(!draft.layers)draft.layers=[]; draft.layers.push({id:'new-layer',label:_t('ui.config.new_layer_label'),color:'#6366F1',order:draft.layers.length}); renderLayers(); validateDraft(); }
+  function removeLayer(i){ draft.layers.splice(i,1); renderLayers(); renderRepos(); validateDraft(); }
+  function toggleLayerCollapse(el){ if(el) el.classList.toggle('layer-open'); }
+  function removeLayerById(id){ const idx=(draft.layers||[]).findIndex(l=>l.id===id); if(idx>=0){ draft.layers.splice(idx,1); renderLayers(); renderRepos(); validateDraft(); } }
+
+  /* --- Repos list --- */
+  function resolveEffectiveUrl(repo){
+    const globalRoot = (draft.settings && draft.settings.repository_root_url || '').replace(/\/+$/,'');
+    const layer = (draft.layers||[]).find(l=>l.id===repo.layer);
+    const layerRoot = (layer && layer.repository_root_url || '').replace(/\/+$/,'');
+    const url = (repo.url||'').trim();
+    if(url.startsWith('http://') || url.startsWith('https://') || url.startsWith('git@') || url.startsWith('ssh://') || url.startsWith('/')) return url;
+    const root = layerRoot || globalRoot;
+    if(root) return root + '/' + url;
+    return url;
+  }
+  function resolveEffectiveBranch(repo){
+    let pat = repo.branch_pattern;
+    if(!pat){
+      const layer = (draft.layers||[]).find(l=>l.id===repo.layer);
+      pat = (layer && layer.branch_pattern) || (draft.release && draft.release.branch_pattern) || 'release/{YYYY}.{MM}';
+    }
+    const m = draft.release && draft.release.target_month || 1;
+    const y = draft.release && draft.release.target_year || 2025;
+    return pat.replace('{YYYY}',y).replace('{YY}',String(y).slice(-2)).replace('{MM}',String(m).padStart(2,'0')).replace('{M}',m);
+  }
+  function renderRepos(){
+    const repos = draft.repositories || [];
+    const layers = draft.layers || [];
+    const layerOpts = layers.map(l=>`<option value="${l.id}">${l.label}</option>`).join('');
+    const layerMap = {};
+    layers.forEach(l=>{ layerMap[l.id]=l; });
+    const globalRoot = (draft.settings && draft.settings.repository_root_url) || '';
+    const container = document.getElementById('reposList');
+
+    // Preserve open accordion state before re-render
+    const openIdxs = new Set();
+    if(container) container.querySelectorAll('.repo-accordion.open').forEach(el=>{
+      const idx = el.getAttribute('data-repo-idx');
+      if(idx !== null) openIdxs.add(idx);
+    });
+
+    // Group repos by layer
+    const grouped = {};
+    layers.forEach(l=>{ grouped[l.id]=[]; });
+    const ungrouped = [];
+    repos.forEach((r,i)=>{
+      const entry = {repo:r, idx:i};
+      if(r.layer && grouped[r.layer]!==undefined) grouped[r.layer].push(entry);
+      else ungrouped.push(entry);
+    });
+
+    function renderRepoAccordion(r, i){
+      const effUrl = resolveEffectiveUrl(r);
+      const effBranch = resolveEffectiveBranch(r);
+      const layerLabel = (layerMap[r.layer] && layerMap[r.layer].label) || r.layer || '\u2014';
+      const layer = layerMap[r.layer];
+      const isDraft = r._draft === true;
+
+      // Determine branch pattern inheritance state
+      const hasRepoOverride = !!r.branch_pattern;
+      const layerPat = layer && layer.branch_pattern;
+      const globalPat = (draft.release && draft.release.branch_pattern) || 'release/{YYYY}.{MM}';
+      let branchSource = _t('ui.config.source_global_default');
+      if(hasRepoOverride) branchSource = _t('ui.config.source_repo_override');
+      else if(layerPat) branchSource = _t('ui.config.source_inherited_layer');
+      else branchSource = _t('ui.config.source_inherited_global');
+      const branchTag = hasRepoOverride
+        ? '<span class="override-tag">'+_t('ui.config.repo_override')+'</span><button class="reset-inherit-btn" onclick="event.stopPropagation();RB.resetRepoBranch('+i+')">'+_t('ui.config.reset_to_inherited')+'</button>'
+        : '<span class="inherited-tag">' + esc(branchSource) + '</span>';
+      const branchPlaceholder = hasRepoOverride ? '' : (layerPat ? '('+_t('ui.config.source_inherited_layer')+': '+esc(layerPat)+')' : '('+_t('ui.config.source_inherited_global')+': '+esc(globalPat)+')');
+
+      // Determine auto-name state
+      const isAutoName = r._autoName === true;
+      const nameIndicator = isAutoName ? '<span class="auto-filled-indicator">'+_t('ui.config.auto_filled_from_url')+'</span>' : '';
+      const draftBadge = isDraft ? '<span class="draft-badge">'+_t('ui.config.draft_badge')+'</span>' : '';
+
+      return `
+      <div class="repo-accordion${isDraft ? ' draft' : ''}" data-repo-idx="${i}">
+        <div class="repo-accordion-header" role="button" tabindex="0" aria-expanded="false" onclick="RB.toggleRepoAccordion(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();RB.toggleRepoAccordion(${i})}">
+          <span class="repo-accordion-chevron">\u25b6</span>
+          <div class="repo-accordion-summary">
+            <span class="repo-accordion-name">${esc(r.name||'(unnamed)')}${draftBadge}</span>
+            <span class="repo-accordion-layer">${esc(layerLabel)}</span>
+            <span class="repo-accordion-meta">${esc(effUrl)}</span>
+          </div>
+          <button class="remove-btn" onclick="event.stopPropagation();RB.removeRepo(${i})">\u2715</button>
+        </div>
+        <div class="repo-accordion-body">
+          <div class="cfg-row">
+            <div class="cfg-field"><label class="cfg-label">Name<span class="required-star">*</span> ${nameIndicator}</label><input class="cfg-input" data-path="repositories.${i}.name" value="${r.name||''}" onchange="RB.updateRepoName(${i},this.value)" oninput="RB.clearDraftFlag(${i})"></div>
+            <div class="cfg-field"><label class="cfg-label">Layer</label><select class="cfg-select" data-path="repositories.${i}.layer" onchange="RB.updateRepo(${i},'layer',this.value);RB.renderRepos()">${layerOpts.replace('value="'+r.layer+'"','value="'+r.layer+'" selected')}</select></div>
+          </div>
+          <div class="cfg-field"><label class="cfg-label">URL / Slug<span class="required-star">*</span></label><input class="cfg-input text-mono" data-path="repositories.${i}.url" value="${r.url||''}" oninput="RB.autoFillRepoName(${i},this.value);RB.clearDraftFlag(${i})" onchange="RB.updateRepo(${i},'url',this.value);RB.autoFillRepoName(${i},this.value)"><div class="cfg-help">${_t('ui.config.url_field_help')}</div><div class="effective-value">\u2192 ${esc(effUrl)}</div></div>
+          <div class="cfg-row">
+            <div class="cfg-field"><label class="cfg-label">Branch Pattern</label><input class="cfg-input text-mono${!hasRepoOverride ? ' cfg-inherited' : ''}" data-path="repositories.${i}.branch_pattern" value="${hasRepoOverride ? r.branch_pattern : (layerPat || globalPat)}" placeholder="${esc(branchPlaceholder || effBranch)}" onchange="RB.updateRepo(${i},'branch_pattern',this.value||undefined);RB.renderRepos()"><div class="effective-value">\u2192 ${esc(effBranch)} ${branchTag}</div></div>
+            <div class="cfg-field"><label class="cfg-label">Default Branch</label><input class="cfg-input" data-path="repositories.${i}.default_branch" value="${r.default_branch||'main'}" onchange="RB.updateRepo(${i},'default_branch',this.value)"></div>
+          </div>
+          <div class="cfg-field"><label class="cfg-label">Notes</label><input class="cfg-input" data-path="repositories.${i}.notes" value="${r.notes||''}" onchange="RB.updateRepo(${i},'notes',this.value||undefined)"></div>
+        </div>
+      </div>`;
+    }
+
+    let html = '';
+    layers.forEach(l=>{
+      const entries = grouped[l.id] || [];
+      const layerRoot = l.repository_root_url || globalRoot || '(none)';
+      const layerHasChanges = isLayerChanged(l.id) || entries.some(e=>isRepoChanged(e.idx));
+      const layerDraftCls = layerHasChanges ? ' draft' : '';
+      const layerDraftBadge = layerHasChanges ? '<span class="draft-badge">'+_t('ui.draft')+'</span>' : '';
+      html += `<div class="cfg-layer-group${layerDraftCls}">
+        <div class="cfg-layer-group-header">
+          <span class="layer-color-dot" style="background:${l.color||'#6366F1'};"></span>
+          ${esc(l.label||l.id)} (${entries.length} repo${entries.length===1?'':'s'}) ${layerDraftBadge}
+          <span class="layer-root-hint" title="${esc(layerRoot)}">${esc(layerRoot)}</span>
+          <button class="layer-group-delete" onclick="RB.removeLayerById('${esc(l.id)}')" title="${_t('ui.config.delete_layer')}">✕</button>
+        </div>
+        <div class="cfg-layer-group-repos">
+          ${entries.map(e=>renderRepoAccordion(e.repo, e.idx)).join('')}
+        </div>
+        <button class="cfg-add-btn" onclick="RB.addRepo('${l.id}')">+ Add to ${esc(l.label||l.id)}</button>
+      </div>`;
+    });
+
+    if(ungrouped.length > 0){
+      html += `<div class="cfg-layer-group">
+        <div class="cfg-layer-group-header">
+          <span class="layer-color-dot" style="background:#9CA3AF;"></span>
+          ${_t('ui.config.unassigned')} (${ungrouped.length} repo${ungrouped.length===1?'':'s'})
+        </div>
+        <div class="cfg-layer-group-repos">
+          ${ungrouped.map(e=>renderRepoAccordion(e.repo, e.idx)).join('')}
+        </div>
+      </div>`;
+    }
+
+    html += '<button class="cfg-add-btn cfg-add-btn-spaced" onclick="RB.addRepo()">+ Add Repository</button>';
+    container.innerHTML = html;
+    // Restore open accordion state after re-render
+    openIdxs.forEach(idx=>{
+      const el = container.querySelector('.repo-accordion[data-repo-idx="'+idx+'"]');
+      if(el) { el.classList.add('open'); const h=el.querySelector('.repo-accordion-header'); if(h) h.setAttribute('aria-expanded','true'); }
+    });
+  }
+  function toggleRepoAccordion(i){
+    const el = document.querySelector('.repo-accordion[data-repo-idx="'+i+'"]');
+    if(el) {
+      el.classList.toggle('open');
+      const hdr = el.querySelector('.repo-accordion-header');
+      if(hdr) hdr.setAttribute('aria-expanded', el.classList.contains('open'));
+    }
+  }
+  function updateRepo(i,k,v){ draft.repositories[i][k]=v; validateDraft(); }
+  function updateRepoName(i, v){
+    const repo = draft.repositories[i];
+    if(!repo) return;
+    repo.name = v;
+    repo._autoName = false; // manual override
+    renderRepos();
+    validateDraft();
+  }
+  function addRepo(layerId){
+    if(!draft.repositories)draft.repositories=[];
+    const layer=layerId||(draft.layers&&draft.layers[0]?draft.layers[0].id:'');
+    const newIdx = draft.repositories.length;
+    draft.repositories.push({name:'',url:'',layer:layer,default_branch:'main',_autoName:true,_draft:true});
+    renderRepos();
+    validateDraft();
+    // Open the new accordion and scroll to it
+    setTimeout(()=>{
+      const el = document.querySelector('.repo-accordion[data-repo-idx="'+newIdx+'"]');
+      if(el){ el.classList.add('open'); el.scrollIntoView({behavior:'smooth',block:'center'}); }
+    }, 50);
+  }
+  function removeRepo(i){ draft.repositories.splice(i,1); renderRepos(); validateDraft(); }
+  function clearDraftFlag(i){ const r=draft.repositories[i]; if(r) delete r._draft; }
+
+  function autoFillRepoName(i, url){
+    const repo = draft.repositories[i];
+    if(!repo) return;
+    // Sync URL to draft immediately so validation sees it
+    repo.url = url;
+    // Only auto-fill if name is empty, the default placeholder, or was previously auto-filled
+    if(repo.name && repo.name !== 'new-repo' && repo.name !== '' && repo._autoName !== true) return;
+    const derived = deriveNameFromUrl(url);
+    if(derived){
+      repo.name = derived; repo._autoName = true;
+      // Update name input in-place without full re-render (preserves URL input focus)
+      const nameEl = document.querySelector('[data-path="repositories.'+i+'.name"]');
+      if(nameEl) nameEl.value = derived;
+      const accName = document.querySelector('.repo-accordion[data-repo-idx="'+i+'"] .repo-accordion-name');
+      if(accName) accName.childNodes[0].textContent = derived;
+    }
+  }
+
+  function resetRepoBranch(i){
+    const repo = draft.repositories[i];
+    if(!repo) return;
+    delete repo.branch_pattern;
+    renderRepos();
+    validateDraft();
+  }
+
+  /* --- URL → Name derivation --- */
+  function deriveNameFromUrl(url){
+    if(!url) return '';
+    let u = url.trim().replace(/\/+$/, '').replace(/\.git$/, '');
+    // SSH shorthand: git@host:org/repo
+    const sshMatch = u.match(/^git@[^:]+:(.+)/);
+    if(sshMatch) u = sshMatch[1].replace(/\.git$/, '');
+    try { const parsed = new URL(u); u = parsed.pathname; } catch(e){}
+    u = u.replace(/\/+$/, '').replace(/\.git$/, '');
+    const parts = u.split('/').filter(Boolean);
+    return parts.length > 0 ? parts[parts.length-1] : '';
+  }
+
+  /* --- Inline table actions --- */
+  function editRepoByName(name){
+    const idx = (draft.repositories||[]).findIndex(r=>r.name===name);
+    if(idx<0) return;
+    toggleDrawer();
+    switchTab('form');
+    setTimeout(()=>{
+      const el = document.querySelector('.repo-accordion[data-repo-idx="'+idx+'"]');
+      if(el){ el.classList.add('open'); el.scrollIntoView({behavior:'smooth',block:'center'}); }
+    }, 300);
+  }
+
+  let pendingDeleteIdx = -1;
+  let pendingDeleteName = '';
+  function deleteRepoByName(name){
+    let idx = (draft.repositories||[]).findIndex(r=>r.name===name);
+    // Fallback: match by URL slug if name changed between analysis and config
+    if(idx<0) idx = (draft.repositories||[]).findIndex(r=>r.url===name);
+    if(idx<0){
+      showToast(_t('ui.error.repo_not_in_config', {name: name}), 'error');
+      return;
+    }
+    pendingDeleteIdx = idx;
+    pendingDeleteName = name;
+    const r = draft.repositories[idx];
+    const layer = (draft.layers||[]).find(l=>l.id===r.layer);
+    const layerLabel = layer ? layer.label : r.layer || '—';
+    const effUrl = resolveEffectiveUrl(r);
+    document.getElementById('deleteDetails').innerHTML = '<dl style="margin:0;"><dt>Name</dt><dd>'+esc(r.name)+'</dd><dt>Layer</dt><dd>'+esc(layerLabel)+'</dd><dt>URL</dt><dd class="text-mono word-break-all" style="font-size:11px;">'+esc(effUrl)+'</dd></dl>';
+    document.getElementById('deleteConfirmBtn').onclick = function(){ confirmDelete(); };
+    document.getElementById('deleteOverlay').classList.add('active');
+  }
+  async function confirmDelete(){
+    if(pendingDeleteIdx >= 0){
+      draft.repositories.splice(pendingDeleteIdx, 1);
+      // Immediately hide the row from the dashboard table
+      const rowName = pendingDeleteName;
+      document.querySelectorAll('.repo-row').forEach(row => {
+        if(row.dataset.repo === rowName) row.remove();
+      });
+      pendingDeleteIdx = -1;
+      pendingDeleteName = '';
+      renderRepos();
+      validateDraft();
+      closeDeleteModal();
+      await pushDraftAndRefresh();
+    } else {
+      closeDeleteModal();
+    }
+  }
+
+  /* --- Push draft to server and re-analyze to update dashboard --- */
+  async function pushDraftAndRefresh(){
+    await fetch('/api/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(cleanDraft(draft))});
+    const res = await fetch('/api/config/save',{method:'POST'});
+    const data = await res.json();
+    if(!data.ok){
+      showSaveErrors(data.errors);
+      return;
+    }
+    closeDrawer();
+    await startAnalysis();
+  }

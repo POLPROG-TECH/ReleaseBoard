@@ -1,0 +1,102 @@
+<script>
+/* i18n — locale persistence: redirect to stored locale if no explicit ?lang= */
+(function() {
+  var stored = localStorage.getItem('rb_locale');
+  if (stored && !new URLSearchParams(window.location.search).has('lang')) {
+    var url = new URL(window.location.href);
+    url.searchParams.set('lang', stored);
+    window.location.replace(url.toString());
+  }
+})();
+</script>
+<script>
+/* i18n — translation catalog and helper */
+var RB_LOCALE = {{ vm.locale|tojson }};
+var RB_TRANSLATIONS = {{ vm.translations_json }};
+var RB_SUPPORTED_LOCALES = {{ vm.supported_locales|tojson }};
+function _t(key, vars) {
+  var val = RB_TRANSLATIONS[key];
+  if (val === undefined || val === null) return key;
+  if (vars) { Object.keys(vars).forEach(function(k) { val = val.split('{' + k + '}').join(vars[k]); }); }
+  return val;
+}
+function _pluralForm(locale, n) {
+  if (locale === 'pl') {
+    if (n === 1) return 'one';
+    var mod10 = n % 10, mod100 = n % 100;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'few';
+    return 'other';
+  }
+  return n === 1 ? 'one' : 'other';
+}
+function _tp(keyBase, count, vars) {
+  vars = vars || {};
+  vars.count = count;
+  var locale = RB_LOCALE || 'en';
+  var form = _pluralForm(locale, count);
+  var key = keyBase + '_' + form;
+  var val = RB_TRANSLATIONS[key];
+  if (val === undefined || val === null) {
+    val = RB_TRANSLATIONS[keyBase + '_other'];
+  }
+  if (val === undefined || val === null) return keyBase;
+  Object.keys(vars).forEach(function(k) { val = val.split('{' + k + '}').join(vars[k]); });
+  return val;
+}
+function switchLocale(code) {
+  localStorage.setItem('rb_locale', code);
+  var url = new URL(window.location.href);
+  url.searchParams.set('lang', code);
+  window.location.href = url.toString();
+}
+function _fmtNum(n) {
+  try { return new Intl.NumberFormat(RB_LOCALE).format(n); } catch(e) { return String(n); }
+}
+var _collator = (function() { try { return new Intl.Collator(RB_LOCALE); } catch(e) { return { compare: function(a,b) { return a < b ? -1 : a > b ? 1 : 0; } }; } })();
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('[data-i18n]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n');
+    var translated = _t(key);
+    if (translated !== key) {
+      // Preserve leading emoji/icon if present
+      var text = el.textContent;
+      var match = text.match(/^([^\w]*)/);
+      var prefix = (match && match[1].trim()) ? match[1] : '';
+      el.textContent = prefix ? prefix + ' ' + translated : translated;
+    }
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n-placeholder');
+    var translated = _t(key);
+    if (translated !== key) el.placeholder = translated;
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n-title');
+    var translated = _t(key);
+    if (translated !== key) el.title = translated;
+  });
+  document.querySelectorAll('[data-i18n-tooltip]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n-tooltip');
+    var translated = _t(key);
+    if (translated !== key) el.setAttribute('data-tooltip', translated);
+  });
+  document.querySelectorAll('[data-i18n-aria-label]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n-aria-label');
+    var translated = _t(key);
+    if (translated !== key) el.setAttribute('aria-label', translated);
+  });
+});
+window.addEventListener('error', function(event) {
+  console.error('[RB] Uncaught error:', event.message, event.filename, event.lineno);
+  if (typeof showToast === 'function') {
+    showToast((_t ? _t('ui.error.unexpected') : 'An unexpected error occurred.'), 'error');
+  }
+});
+window.addEventListener('unhandledrejection', function(event) {
+  console.error('[RB] Unhandled promise rejection:', event.reason);
+  event.preventDefault();
+  if (typeof showToast === 'function') {
+    showToast((_t ? _t('ui.error.unexpected') : 'An unexpected error occurred.'), 'error');
+  }
+});
+</script>

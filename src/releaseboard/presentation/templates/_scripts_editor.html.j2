@@ -1,0 +1,916 @@
+  /* ============================================================
+     Section Order (template-driven, no drag-and-drop)
+     ============================================================ */
+  let sectionOrder = null;
+
+  function getDefaultSectionOrder(){
+    const sections = document.querySelectorAll('#dashboardContent .dashboard-section');
+    return Array.from(sections).map(s=>s.dataset.sectionId).filter(Boolean);
+  }
+
+  function initSectionOrder(){
+    try {
+      const saved = localStorage.getItem('rb-section-order');
+      if(saved){ sectionOrder = JSON.parse(saved); applySectionOrder(); }
+      else { sectionOrder = getDefaultSectionOrder(); }
+    } catch(e){ sectionOrder = getDefaultSectionOrder(); }
+  }
+
+  function applySectionOrder(){
+    if(!sectionOrder || sectionOrder.length === 0) return;
+    const container = document.getElementById('dashboardContent');
+    if(!container) return;
+    const sections = {};
+    container.querySelectorAll('.dashboard-section').forEach(el=>{
+      if(el.dataset.sectionId) sections[el.dataset.sectionId] = el;
+    });
+    const appended = new Set();
+    sectionOrder.forEach(id=>{
+      if(sections[id]){ container.appendChild(sections[id]); appended.add(id); }
+    });
+    Object.keys(sections).forEach(id=>{
+      if(!appended.has(id)) container.appendChild(sections[id]);
+    });
+  }
+
+  function saveSectionOrder(){
+    const container = document.getElementById('dashboardContent');
+    sectionOrder = Array.from(container.querySelectorAll('.dashboard-section')).map(s=>s.dataset.sectionId).filter(Boolean);
+    try{ localStorage.setItem('rb-section-order', JSON.stringify(sectionOrder)); }catch(e){}
+  }
+
+  /* ============================================================
+     Layout Templates
+     ============================================================ */
+  const PREDEFINED_TEMPLATES = {
+    'default': { name: _t('ui.template.default'), order: ['milestones','metrics','filters','attention','layer-*','summary'] },
+    'executive': { name: _t('ui.template.executive'), order: ['milestones','metrics','summary'] },
+    'release-manager': { name: _t('ui.template.release_manager'), order: ['milestones','attention','filters','layer-*','metrics','summary'] },
+    'engineering': { name: _t('ui.template.engineering'), order: ['milestones','filters','layer-*','attention','metrics','summary'] },
+    'compact': { name: _t('ui.template.compact'), order: ['milestones','metrics','attention','summary'] },
+    'calendar': { name: _t('ui.template.calendar'), order: ['milestones','release-calendar'] },
+  };
+
+  let activeTemplate = 'engineering';
+  let userTemplates = {};
+
+  function loadTemplates(){
+    try{
+      const saved = localStorage.getItem('rb-user-templates');
+      if(saved) userTemplates = JSON.parse(saved);
+      const active = localStorage.getItem('rb-active-template');
+      if(active) activeTemplate = active;
+    }catch(e){}
+    renderTemplateList();
+    if(activeTemplate) applyTemplate(activeTemplate);
+  }
+
+  function saveUserTemplates(){
+    try{
+      localStorage.setItem('rb-user-templates', JSON.stringify(userTemplates));
+      localStorage.setItem('rb-active-template', activeTemplate);
+    }catch(e){}
+  }
+
+  function renderTemplateList(){
+    const container = document.getElementById('layoutTemplateList');
+    if(!container) return;
+    let html = '';
+    // Predefined
+    Object.keys(PREDEFINED_TEMPLATES).forEach(id=>{
+      const t = PREDEFINED_TEMPLATES[id];
+      const cls = activeTemplate === id ? 'active' : '';
+      html += '<button class="layout-template-btn '+cls+'" onclick="RB.applyTemplate(\''+id+'\')">'+esc(t.name)+'</button>';
+    });
+    // User templates
+    Object.keys(userTemplates).forEach(id=>{
+      const t = userTemplates[id];
+      const cls = activeTemplate === id ? 'active' : '';
+      html += '<button class="layout-template-btn '+cls+'" onclick="RB.applyTemplate(\''+id+'\')" oncontextmenu="event.preventDefault();RB.deleteTemplate(\''+id+'\')">'+esc(t.name)+' ✎</button>';
+    });
+    container.innerHTML = html;
+  }
+
+  function applyTemplate(id){
+    const template = PREDEFINED_TEMPLATES[id] || userTemplates[id];
+    if(!template) return;
+    activeTemplate = id;
+    // Expand wildcard patterns like 'layer-*' to actual layer section IDs
+    const allSections = getDefaultSectionOrder();
+    const layerSections = allSections.filter(s=>s.startsWith('layer-'));
+    const expanded = [];
+    template.order.forEach(pat=>{
+      if(pat === 'layer-*'){ layerSections.forEach(l=>expanded.push(l)); }
+      else { expanded.push(pat); }
+    });
+    // Ensure milestones is always included (persistent shared section)
+    if(!expanded.includes('milestones') && allSections.includes('milestones')){
+      expanded.splice(0, 0, 'milestones');
+    }
+    sectionOrder = expanded;
+
+    // Hide sections not in template (visibility control)
+    const container = document.getElementById('dashboardContent');
+    container.querySelectorAll('.dashboard-section').forEach(el=>{
+      const sid = el.dataset.sectionId;
+      // Never hide milestones or empty-state via template — they're managed by their own init logic
+      if(sid === 'milestones' || sid === 'empty-state') return;
+      el.classList.toggle('hidden', sid && !expanded.includes(sid));
+    });
+
+    applySectionOrder();
+    saveSectionOrder();
+    saveUserTemplates();
+    renderTemplateList();
+  }
+
+
+  function deleteTemplate(id){
+    if(!userTemplates[id]) return;
+    showModal({
+      title: _t('ui.modal.delete_template'),
+      desc: _t('ui.modal.confirm_delete_template', {name: esc(userTemplates[id].name)}),
+      buttons: [
+        { label: _t('ui.delete'), cls: 'danger', onClick: function(){
+          closeModal();
+          delete userTemplates[id];
+          if(activeTemplate === id){ activeTemplate = 'default'; applyTemplate('default'); }
+          saveUserTemplates();
+          renderTemplateList();
+        }},
+        { label: _t('ui.cancel'), cls: 'cancel' }
+      ]
+    });
+  }
+
+
+  /* --- JSON Autocomplete --- */
+  let acPopup = null;
+  function initJsonAutocomplete(){
+    const editor = document.getElementById('jsonEditor');
+    if(!editor) return;
+    editor.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && acPopup){ hideAcPopup(); e.preventDefault(); return; }
+      if(acPopup && (e.key === 'ArrowDown' || e.key === 'ArrowUp')){
+        e.preventDefault();
+        const items = acPopup.querySelectorAll('.json-autocomplete-item');
+        const cur = acPopup.querySelector('.selected');
+        let idx = Array.from(items).indexOf(cur);
+        if(e.key==='ArrowDown') idx = Math.min(idx+1, items.length-1);
+        else idx = Math.max(idx-1, 0);
+        items.forEach(it=>it.classList.remove('selected'));
+        items[idx]?.classList.add('selected');
+        return;
+      }
+      if(acPopup && e.key === 'Enter'){
+        const sel = acPopup.querySelector('.selected');
+        if(sel){ e.preventDefault(); insertAcValue(editor, sel.dataset.value); hideAcPopup(); return; }
+      }
+      if(acPopup && e.key === 'Tab'){
+        const sel = acPopup.querySelector('.selected') || acPopup.querySelector('.json-autocomplete-item');
+        if(sel){ e.preventDefault(); insertAcValue(editor, sel.dataset.value); hideAcPopup(); return; }
+      }
+    });
+    editor.addEventListener('input', function(){ showAcSuggestions(this); });
+    editor.addEventListener('blur', function(){ setTimeout(hideAcPopup, 200); });
+  }
+  function showAcSuggestions(editor){
+    const pos = editor.selectionStart;
+    const text = editor.value.substring(0, pos);
+    // Detect if we're after a quote that looks like a key position
+    const lineStart = text.lastIndexOf('\n') + 1;
+    const line = text.substring(lineStart);
+    const keyMatch = line.match(/"([a-z_]*)$/i);
+    if(!keyMatch){ hideAcPopup(); return; }
+    const partial = keyMatch[1].toLowerCase();
+    // Determine context: what object are we in?
+    const context = detectJsonContext(text);
+    const suggestions = getFieldSuggestions(context, partial);
+    if(suggestions.length === 0){ hideAcPopup(); return; }
+    if(!acPopup){
+      acPopup = document.createElement('div');
+      acPopup.className = 'json-autocomplete';
+      editor.parentElement.appendChild(acPopup);
+    }
+    acPopup.innerHTML = suggestions.map((s,i)=>
+      '<div class="json-autocomplete-item'+(i===0?' selected':'')+'" data-value="'+s.key+'" onmousedown="RB.insertAcFromClick(\''+s.key+'\')"><span class="ac-key">'+s.key+'</span><span class="ac-type">'+s.type+'</span></div>'
+    ).join('');
+    // Position near cursor
+    const rect = editor.getBoundingClientRect();
+    const lineNum = text.split('\n').length;
+    const lineHeight = 18;
+    acPopup.style.top = Math.min(lineNum * lineHeight, rect.height - 50) + 'px';
+    acPopup.style.left = (keyMatch.index * 7 + 20) + 'px';
+    acPopup.style.display = 'block';
+  }
+  function hideAcPopup(){ if(acPopup){ acPopup.style.display = 'none'; } }
+  function insertAcValue(editor, key){
+    const pos = editor.selectionStart;
+    const text = editor.value;
+    const before = text.substring(0, pos);
+    const after = text.substring(pos);
+    const keyMatch = before.match(/"([a-z_]*)$/i);
+    if(!keyMatch) return;
+    const start = pos - keyMatch[1].length;
+    editor.value = text.substring(0, start) + key + after;
+    editor.selectionStart = editor.selectionEnd = start + key.length;
+    editor.dispatchEvent(new Event('input'));
+  }
+  function insertAcFromClick(key){
+    const editor = document.getElementById('jsonEditor');
+    if(editor) insertAcValue(editor, key);
+    hideAcPopup();
+  }
+  function detectJsonContext(text){
+    // Count open braces/brackets to find context
+    let depth = 0; let inArray = false; let lastKey = '';
+    for(let i=0;i<text.length;i++){
+      if(text[i]==='{') depth++;
+      else if(text[i]==='}') depth--;
+      else if(text[i]==='[') inArray = true;
+      else if(text[i]===']') inArray = false;
+    }
+    // Find the last key before current position at the right depth
+    const keyMatches = [...text.matchAll(/"(\w+)"\s*:/g)];
+    if(depth <= 1) return 'root';
+    // Find enclosing object key
+    let braceCount = 0;
+    for(let i = text.length-1; i>=0; i--){
+      if(text[i]==='}') braceCount++;
+      else if(text[i]==='{'){
+        if(braceCount > 0) braceCount--;
+        else {
+          const before = text.substring(Math.max(0,i-50), i);
+          const km = before.match(/"(\w+)"\s*:\s*[\[{]?\s*$/);
+          if(km) return km[1];
+          break;
+        }
+      }
+    }
+    return 'root';
+  }
+  const SCHEMA_FIELDS = {
+    root: [{key:'release',type:'object'},{key:'layers',type:'array'},{key:'repositories',type:'array'},{key:'branding',type:'object'},{key:'settings',type:'object'},{key:'author',type:'object'},{key:'layout',type:'object'}],
+    release: [{key:'name',type:'string'},{key:'target_month',type:'int 1-12'},{key:'target_year',type:'int'},{key:'branch_pattern',type:'string'}],
+    layers: [{key:'id',type:'string'},{key:'label',type:'string'},{key:'branch_pattern',type:'string'},{key:'color',type:'hex'},{key:'order',type:'int'},{key:'repository_root_url',type:'string'}],
+    repositories: [{key:'name',type:'string'},{key:'url',type:'string'},{key:'layer',type:'string'},{key:'branch_pattern',type:'string'},{key:'default_branch',type:'string'},{key:'notes',type:'string'}],
+    branding: [{key:'title',type:'string'},{key:'subtitle',type:'string'},{key:'company',type:'string'},{key:'primary_color',type:'hex'},{key:'secondary_color',type:'hex'},{key:'tertiary_color',type:'hex'}],
+    settings: [{key:'stale_threshold_days',type:'int'},{key:'output_path',type:'string'},{key:'theme',type:'enum'},{key:'verbose',type:'bool'},{key:'timeout_seconds',type:'int'},{key:'max_concurrent',type:'int'},{key:'repository_root_url',type:'string'}],
+    author: [{key:'name',type:'string'},{key:'role',type:'string'},{key:'url',type:'string'},{key:'tagline',type:'string'},{key:'copyright',type:'string'}],
+    layout: [{key:'default_template',type:'string'},{key:'section_order',type:'array'},{key:'enable_drag_drop',type:'bool'}],
+  };
+  function getFieldSuggestions(context, partial){
+    const fields = SCHEMA_FIELDS[context] || SCHEMA_FIELDS.root;
+    return fields.filter(f => f.key.startsWith(partial));
+  }
+
+  /* --- Effective/Active Settings Tab --- */
+  function renderEffectiveTab(){
+    const c = document.getElementById('effectiveContent');
+    if(!c) return;
+    const globalBranch = (draft.release && draft.release.branch_pattern) || 'release/{YYYY}.{MM}';
+    const globalRoot = (draft.settings && draft.settings.repository_root_url) || '';
+    const m = draft.release && draft.release.target_month || 1;
+    const y = draft.release && draft.release.target_year || 2025;
+    function resolve(pat){ return pat.replace('{YYYY}',y).replace('{YY}',String(y).slice(-2)).replace('{MM}',String(m).padStart(2,'0')).replace('{M}',m); }
+    let h = '';
+    // Global settings
+    h += '<div class="eff-section"><div class="eff-section-title">'+_t('ui.config.effective.global_settings')+'</div><table class="eff-table">';
+    h += effRow(_t('ui.config.effective.release_name'), draft.release?.name || '(none)', 'config');
+    h += effRow(_t('ui.config.effective.target'), (draft.release?.target_month||'?') + '/' + (draft.release?.target_year||'?'), 'config');
+    h += effRow(_t('ui.config.effective.branch_pattern'), globalBranch, draft.release?.branch_pattern ? 'config' : 'default');
+    h += effRow(_t('ui.config.effective.resolved_branch'), resolve(globalBranch), 'derived');
+    h += effRow(_t('ui.config.effective.root_url'), globalRoot || '(none)', globalRoot ? 'config' : 'default');
+    h += effRow(_t('ui.config.effective.stale_threshold'), (draft.settings?.stale_threshold_days||14) + ' days', draft.settings?.stale_threshold_days ? 'config' : 'default');
+    h += effRow(_t('ui.config.effective.theme'), draft.settings?.theme || 'system', draft.settings?.theme ? 'config' : 'default');
+    h += effRow(_t('ui.config.effective.timeout'), (draft.settings?.timeout_seconds||30) + 's', draft.settings?.timeout_seconds ? 'config' : 'default');
+    h += '</table></div>';
+    // Layers
+    const layers = draft.layers || [];
+    if(layers.length > 0){
+      h += '<div class="eff-section"><div class="eff-section-title">'+_t('ui.config.effective.layers')+'</div><table class="eff-table">';
+      h += '<tr><th>'+_t('ui.config.effective.layer')+'</th><th>'+_t('ui.config.effective.branch_pattern')+'</th><th>'+_t('ui.config.effective.resolved')+'</th><th>'+_t('ui.config.effective.root_url')+'</th><th>'+_t('ui.config.effective.source')+'</th></tr>';
+      layers.forEach(l=>{
+        const pat = l.branch_pattern || globalBranch;
+        const root = l.repository_root_url || globalRoot || '(none)';
+        const src = l.branch_pattern ? 'layer' : 'global';
+        const rootSrc = l.repository_root_url ? 'layer' : (globalRoot ? 'global' : 'default');
+        h += '<tr><td class="eff-key">' + esc(l.label||l.id) + '</td><td class="eff-val">' + esc(pat) + '</td><td class="eff-val">' + esc(resolve(pat)) + '</td><td class="eff-val">' + esc(root) + '</td><td><span class="eff-source '+src+'">' + src + '</span> <span class="eff-source '+rootSrc+'">' + rootSrc + '</span></td></tr>';
+      });
+      h += '</table></div>';
+    }
+    // Repositories
+    const repos = draft.repositories || [];
+    if(repos.length > 0){
+      h += '<div class="eff-section"><div class="eff-section-title">'+_t('ui.config.effective.repositories')+' (' + repos.length + ')</div><table class="eff-table">';
+      h += '<tr><th>'+_t('ui.config.effective.name')+'</th><th>'+_t('ui.config.effective.layer')+'</th><th>'+_t('ui.config.effective.effective_url')+'</th><th>'+_t('ui.config.effective.effective_branch')+'</th><th>'+_t('ui.config.effective.sources')+'</th></tr>';
+      repos.forEach(r=>{
+        const layer = layers.find(l=>l.id===r.layer);
+        const effUrl = resolveEffectiveUrl(r);
+        const effBranch = resolveEffectiveBranch(r);
+        const branchSrc = r.branch_pattern ? 'repo' : (layer && layer.branch_pattern ? 'layer' : 'global');
+        const urlSrc = (r.url && /^(https?:\/\/|git@|ssh:\/\/)/.test(r.url)) ? 'repo' : ((layer?.repository_root_url || globalRoot) ? 'derived' : 'repo');
+        const nameSrc = r._autoName ? 'derived' : 'config';
+        h += '<tr><td class="eff-key">' + esc(r.name||'(unnamed)') + ' <span class="eff-source '+nameSrc+'">' + nameSrc + '</span></td>';
+        h += '<td>' + esc(layer?.label || r.layer || '—') + '</td>';
+        h += '<td class="eff-val">' + esc(effUrl) + '</td>';
+        h += '<td class="eff-val">' + esc(effBranch) + '</td>';
+        h += '<td><span class="eff-source '+branchSrc+'">'+_t('ui.config.effective.source_branch')+' '+branchSrc+'</span> <span class="eff-source '+urlSrc+'">'+_t('ui.config.effective.source_url')+' '+urlSrc+'</span></td></tr>';
+      });
+      h += '</table></div>';
+    }
+    // Branding
+    h += '<div class="eff-section"><div class="eff-section-title">'+_t('ui.config.effective.branding')+'</div><table class="eff-table">';
+    h += effRow(_t('ui.config.effective.title'), draft.branding?.title || 'ReleaseBoard', draft.branding?.title ? 'config' : 'default');
+    h += effRow(_t('ui.config.effective.subtitle'), draft.branding?.subtitle || 'Release Readiness Dashboard', draft.branding?.subtitle ? 'config' : 'default');
+    h += effRow(_t('ui.config.effective.company'), draft.branding?.company || '(none)', draft.branding?.company ? 'config' : 'default');
+    h += effRow(_t('ui.config.effective.primary'), draft.branding?.primary_color || '#fb6400', draft.branding?.primary_color ? 'config' : 'default');
+    h += effRow(_t('ui.config.effective.secondary'), draft.branding?.secondary_color || '#002754e6', draft.branding?.secondary_color ? 'config' : 'default');
+    h += effRow(_t('ui.config.effective.tertiary'), draft.branding?.tertiary_color || '#10b981', draft.branding?.tertiary_color ? 'config' : 'default');
+    h += '</table></div>';
+    c.innerHTML = h;
+  }
+  function effRow(key, val, src){
+    return '<tr><td class="eff-key">' + esc(key) + '</td><td class="eff-val">' + esc(String(val)) + '</td><td><span class="eff-source ' + src + '">' + src + '</span></td></tr>';
+  }
+
+  /* --- JSON Editor Validation --- */
+  function showJsonParseError(msg){
+    const bar = document.getElementById('jsonValBar');
+    const okEl = document.getElementById('jsonValOk');
+    const errEl = document.getElementById('jsonValErr');
+    const countEl = document.getElementById('jsonValCount');
+    const listEl = document.getElementById('jsonValErrors');
+    okEl.style.display = 'none'; okEl.classList.add('hidden');
+    errEl.classList.remove('hidden'); errEl.style.display = '';
+    errEl.textContent = '✗ ' + _t('ui.error.json_parse') + ': ' + msg;
+    countEl.textContent = '';
+    listEl.classList.add('hidden');
+    listEl.innerHTML = '';
+  }
+
+  async function validateJsonEditor(obj){
+    const bar = document.getElementById('jsonValBar');
+    const okEl = document.getElementById('jsonValOk');
+    const errEl = document.getElementById('jsonValErr');
+    const countEl = document.getElementById('jsonValCount');
+    const listEl = document.getElementById('jsonValErrors');
+    try{
+      const res = await fetch('/api/config/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});
+      const data = await res.json();
+      const errors = data.errors || [];
+      if(errors.length === 0){
+        okEl.classList.remove('hidden'); okEl.style.display = '';
+        errEl.style.display = 'none'; errEl.classList.add('hidden');
+        countEl.textContent = _t('ui.config.effective.top_level_fields',{count:Object.keys(obj).length});
+        listEl.classList.add('hidden');
+        listEl.innerHTML = '';
+      } else {
+        okEl.style.display = 'none'; okEl.classList.add('hidden');
+        errEl.classList.remove('hidden'); errEl.style.display = '';
+        errEl.textContent = '✗ ' + _t('ui.error.validation_count',{count:errors.length});
+        countEl.textContent = '';
+        listEl.innerHTML = '';
+        errors.forEach(function(e){
+          const li = document.createElement('li');
+          let neatPath = e.loc ? e.loc.join('.') : '';
+          if(neatPath.startsWith('body.')) { neatPath = neatPath.substring(5); }
+          
+          const pathMappings = {
+            'release.name': _t('ui.config.release_name', 'Release Name'),
+            'release.target_year': _t('ui.config.release_target_year', 'Target Year'),
+            'settings.timeout_seconds': _t('ui.config.timeout_seconds', 'Timeout'),
+            'settings.max_concurrent': _t('ui.config.max_concurrent', 'Max Concurrent'),
+            'settings.stale_threshold_days': _t('ui.config.stale_days', 'Stale Threshold'),
+            'settings.repository_root_url': _t('ui.config.repo_root_url', 'Repository Root URL'),
+            'branding.primary_color': _t('ui.config.primary_color', 'Primary Color'),
+            'settings.output_path': _t('ui.config.output_path', 'Output Path')
+          };
+          const displayPath = pathMappings[neatPath] || neatPath;
+          
+          li.textContent = displayPath ? (displayPath + ': ' + e.msg) : e.msg;
+          listEl.appendChild(li);
+        });
+        listEl.classList.remove('hidden');
+      }
+    }catch(e){
+      okEl.style.display = 'none'; okEl.classList.add('hidden');
+      errEl.classList.remove('hidden'); errEl.style.display = '';
+      errEl.textContent = '✗ ' + _t('ui.error.validation_failed');
+      countEl.textContent = '';
+      listEl.classList.add('hidden');
+    }
+  }
+
+  /* --- Effective value validation for auto-derived/inherited --- */
+  function validateEffectiveValues(){
+    const errors = [];
+    // Validate target_year >= current year
+    const ty = draft.release && draft.release.target_year;
+    if(ty != null && ty < new Date().getFullYear())
+      errors.push('release.target_year: '+_t('ui.validation.target_year_past'));
+    // Validate layer order >= 0
+    (draft.layers||[]).forEach((l,i)=>{
+      if(typeof l.order === 'number' && l.order < 0)
+        errors.push(`layers.${i}.order: `+_t('ui.validation.order_negative'));
+    });
+    // Validate repository_root_url format
+    const rootUrl = (draft.settings && draft.settings.repository_root_url) || '';
+    if(rootUrl && !/^(https?:\/\/|git@|ssh:\/\/|git:\/\/|\/)/.test(rootUrl))
+      errors.push('settings.repository_root_url: '+_t('ui.validation.invalid_url'));
+    (draft.repositories||[]).forEach((r,i)=>{
+      const effUrl = resolveEffectiveUrl(r);
+      const effBranch = resolveEffectiveBranch(r);
+      if(!r.name && !r.url) errors.push(`repositories.${i}.name: `+_t('ui.validation.name_url_empty'));
+      else if(!r.name) errors.push(`repositories.${i}.name: `+_t('ui.validation.name_empty_hint'));
+      if(effUrl && !/^(https?:\/\/|git@|ssh:\/\/|git:\/\/|\/)/.test(effUrl) && !effUrl.includes('/'))
+        errors.push(`repositories.${i}.url: `+_t('ui.validation.bare_slug'));
+    });
+    return errors;
+  }
+
+  /* --- Validation --- */
+  function friendlyError(msg) {
+    const map = [
+      [/release\.name:.*should be non-empty/, function(){ return _t('ui.validation.release_name_empty'); }],
+      [/release\.target_year:.*less than.*minimum/, function(){ return _t('ui.validation.target_year_past'); }],
+      [/branding\.secondary_color:.*does not match/, function(){ return _t('ui.validation.secondary_color_invalid'); }],
+      [/branding\.primary_color:.*does not match/, function(){ return _t('ui.validation.primary_color_invalid'); }],
+      [/settings\.max_concurrent:.*less than.*minimum/, function(){ return _t('ui.validation.max_concurrency'); }],
+      [/settings\.stale_threshold_days:.*less than.*minimum/, function(){ return _t('ui.validation.stale_threshold'); }],
+      [/settings\.timeout_seconds:.*less than.*minimum/, function(){ return _t('ui.validation.timeout'); }],
+      [/settings\.theme:.*is not one of/, function(){ return _t('ui.validation.theme'); }],
+      [/repositories\[(\d+)\]\.layer: '([^']+)' is not defined in layers/, function(m){ return _t('ui.validation.layer_not_defined', {index: +m[1]+1, layer: m[2]}); }],
+      [/repositories\.(\d+).*url.*should be non-empty/, function(m){ return _t('ui.validation.url_empty', {index: +m[1]+1}); }],
+      [/repositories\.(\d+).*name.*should be non-empty/, function(m){ return _t('ui.validation.name_empty', {index: +m[1]+1}); }],
+      [/repositories.*should be non-empty/, function(){ return _t('ui.validation.repo_list_empty'); }],
+    ];
+    for (const [re, repl] of map) {
+      const m = msg.match(re);
+      if (m) return typeof repl === 'function' ? repl(m) : repl;
+    }
+    return msg;
+  }
+
+  function clearFieldErrors() {
+    document.querySelectorAll('.cfg-field-error').forEach(el => el.remove());
+    document.querySelectorAll('.cfg-input.has-error, .cfg-select.has-error').forEach(el => el.classList.remove('has-error'));
+  }
+  function showFieldError(field, msg) {
+    field.classList.add('has-error');
+    const d = document.createElement('div'); d.className = 'cfg-field-error'; d.textContent = msg;
+    const p = field.closest('.cfg-field');
+    if(p) p.appendChild(d); else field.insertAdjacentElement('afterend', d);
+  }
+  function errorToDataPath(e) {
+    const i = e.indexOf(':'); if(i<0) return null;
+    return e.substring(0,i).trim().replace(/\[(\d+)\]/g,'.$1');
+  }
+  function placeErrors(errors, panelPrefix) {
+    const panel = document.getElementById('validationPanel');
+    clearFieldErrors();
+    const unmatched = [];
+    (errors||[]).forEach(e => {
+      const friendly = friendlyError(e), path = errorToDataPath(e);
+      
+      let inlineDisplay = friendly;
+      if (path && inlineDisplay.startsWith(path + ':')) {
+        inlineDisplay = inlineDisplay.substring(path.length + 1).trim();
+      }
+      
+      const field = path ? document.querySelector('[data-path="'+CSS.escape(path)+'"]') : null;
+      if(field) {
+        showFieldError(field, inlineDisplay);
+      } else {
+        let globalDisplay = friendly;
+        if (path && globalDisplay.startsWith(path + ':')) {
+           const map = {
+             'release.name': _t('ui.config.release_name', 'Release Name'),
+             'release.target_year': _t('ui.config.release_target_year', 'Target Year'),
+             'settings.timeout_seconds': _t('ui.config.timeout_seconds', 'Timeout (seconds)'),
+             'settings.max_concurrent': _t('ui.config.max_concurrent', 'Max Concurrent'),
+             'settings.stale_threshold_days': _t('ui.config.stale_days', 'Stale Threshold (days)'),
+             'branding.primary_color': _t('ui.config.primary_color', 'Primary Color'),
+             'settings.repository_root_url': _t('ui.config.repo_root_url', 'Repository Root URL'),
+             'settings.output_path': _t('ui.config.output_path', 'Output Path')
+           };
+           let baseMsg = globalDisplay.substring(path.length + 1).trim();
+           globalDisplay = (map[path] || path) + ': ' + baseMsg;
+        }
+        unmatched.push(globalDisplay);
+      }
+    });
+    if(unmatched.length) {
+      panel.classList.remove('clean');
+      const header = panelPrefix || _t('ui.validation.errors_found');
+      panel.innerHTML = '<div style="font-weight:600;margin-bottom:4px;color:var(--primary);">'+esc(header)+'</div>' +
+        '<ul class="validation-error-list">'+unmatched.map(e=>'<li>'+esc(e)+'</li>').join('')+'</ul>';
+      panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+    } else { panel.innerHTML=''; panel.classList.add('clean'); }
+    _updateActionButtons((errors||[]).length > 0, errors);
+  }
+  function showSaveErrors(errors) { placeErrors(errors, _t('ui.error.save_failed')); }
+
+  function _updateActionButtons(hasErrors, errors) {
+    var applyBtn = document.getElementById('btnApplyConfig');
+    var saveBtn = document.getElementById('btnSaveConfig');
+    if(applyBtn) {
+      applyBtn.disabled = hasErrors;
+      if(hasErrors && errors && errors.length) {
+        applyBtn.title = _t('ui.validation.fix_errors_hint') + ' (' + errors.length + ')';
+      } else {
+        applyBtn.title = '';
+      }
+    }
+    if(saveBtn) {
+      saveBtn.disabled = hasErrors;
+      if(hasErrors && errors && errors.length) {
+        saveBtn.title = _t('ui.validation.fix_errors_hint') + ' (' + errors.length + ')';
+      } else {
+        saveBtn.title = '';
+      }
+    }
+  }
+
+  async function validateDraft(){
+    const res = await fetch('/api/config/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cleanDraft(draft))});
+    const data = await res.json();
+    validationErrors = data.errors || [];
+    const allErrors = validationErrors.concat(validateEffectiveValues());
+    if(allErrors.length > 0){ placeErrors(allErrors, null); }
+    else {
+      clearFieldErrors();
+      const panel = document.getElementById('validationPanel');
+      panel.classList.remove('clean');
+      panel.innerHTML = '<div class="validation-ok">✓ '+esc(_t('ui.validation.config_valid'))+'</div>';
+      _updateActionButtons(false, []);
+    }
+    await fetch('/api/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(cleanDraft(draft))});
+    const stRes = await fetch('/api/config');
+    const stData = await stRes.json();
+    updateUnsavedBadge(stData.has_unsaved_changes);
+  }
+
+  let _hasUnsavedChanges = false;
+  function updateUnsavedBadge(hasChanges){
+    _hasUnsavedChanges = hasChanges;
+    const badge = document.getElementById('unsavedBadge');
+    if(badge) badge.classList.toggle('hidden', !hasChanges);
+    const drawerBadge = document.getElementById('drawerDraftBadge');
+    if(drawerBadge) drawerBadge.classList.toggle('hidden', !hasChanges);
+  }
+  function hasUnsavedChanges(){ return _hasUnsavedChanges; }
+
+  /* --- Config actions --- */
+  async function applyConfig(){
+    if(currentTab==='form') readForm();
+    else if(currentTab==='json'){
+      try { draft = JSON.parse(document.getElementById('jsonEditor').value); } catch(e){
+        showSaveErrors([_t('validation.invalid_json','Invalid JSON syntax')]);
+        return;
+      }
+    }
+    try {
+      const r1 = await fetch('/api/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(cleanDraft(draft))});
+      if(!r1.ok){ showSaveErrors([_t('validation.save_failed','Failed to update configuration')]); return; }
+      const r2 = await fetch('/api/config/save',{method:'POST'});
+      const d2 = await r2.json();
+      if(!d2.ok){ showSaveErrors(d2.errors||[_t('validation.save_failed','Save failed')]); return; }
+      closeDrawer();
+      await startAnalysis();
+    } catch(e){
+      showSaveErrors([_t('validation.network_error','Network error — check connection')]);
+    }
+  }
+
+  async function saveConfig(){
+    if(currentTab==='form') readForm();
+    else if(currentTab==='json'){
+      try { draft = JSON.parse(document.getElementById('jsonEditor').value); } catch(e){
+        showSaveErrors([_t('validation.invalid_json','Invalid JSON syntax')]);
+        return;
+      }
+    }
+    try {
+      await fetch('/api/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(cleanDraft(draft))});
+      const res = await fetch('/api/config/save',{method:'POST'});
+      const data = await res.json();
+      if(data.ok){
+        updateUnsavedBadge(false);
+        window.location.href = window.location.pathname + '?t=' + Date.now();
+      } else {
+        showSaveErrors(data.errors);
+      }
+    } catch(e){
+      showSaveErrors([_t('validation.network_error','Network error — check connection')]);
+    }
+  }
+
+  async function resetConfig(){
+    const res = await fetch('/api/config/reset',{method:'POST'});
+    const data = await res.json();
+    if(data.ok){
+      draft = data.draft;
+      populateForm();
+      updateJsonEditor();
+      updateUnsavedBadge(false);
+      document.getElementById('validationPanel').classList.add('clean');
+      _updateActionButtons(false);
+    }
+  }
+
+  function discardConfig(){
+    if(!_hasUnsavedChanges){ return; }
+    showModal({
+      title: _t('ui.config.discard_title'),
+      desc: _t('ui.config.discard_desc'),
+      buttons: [
+        { label: _t('ui.config.discard_confirm'), cls:'danger', onClick: function(){ closeModal(); resetConfig(); } },
+        { label: _t('ui.cancel'), cls:'cancel', onClick: function(){ closeModal(); } }
+      ]
+    });
+  }
+
+  function resetToDefaults(){
+    showModal({
+      title: _t('ui.confirm.reset_title'),
+      desc: _t('ui.confirm.reset_desc'),
+      buttons: [
+        { label: _t('ui.confirm.reset_yes'), cls: 'danger', onClick: function(){
+          closeModal();
+          const now = new Date();
+          const mm = now.getMonth() + 1;
+          const yyyy = now.getFullYear();
+          const padMM = String(mm).padStart(2, '0');
+          draft = {
+            release: {
+              name: yyyy + '.' + padMM + ' Release',
+              target_month: mm,
+              target_year: yyyy,
+              branch_pattern: 'release/{YYYY}.{MM}'
+            },
+            layers: [
+              { id: 'ui',  label: 'UI',  color: '#6366F1', order: 1 },
+              { id: 'api', label: 'API', color: '#F59E0B', order: 2 },
+              { id: 'db',  label: 'DB',  color: '#10B981', order: 3 }
+            ],
+            repositories: [],
+            branding: {},
+            settings: {}
+          };
+          populateForm();
+          updateJsonEditor();
+          validateDraft();
+        }},
+        { label: _t('ui.cancel'), cls: 'cancel' }
+      ]
+    });
+  }
+
+  /* ===== Config Import Wizard ===== */
+  let _cfgImportData = null, _cfgPreviewBackup = null;
+
+  function openConfigImport() {
+    const o = document.getElementById('cfgImportOverlay'); if (!o) return;
+    _cfgImportData = null;
+    const dz = document.getElementById('cfgImportDropzone'); if (dz) dz.style.display = '';
+    const st = document.getElementById('cfgImportStatus'); if (st) { st.style.display = 'none'; st.innerHTML = ''; }
+    const ac = document.getElementById('cfgImportActions'); if (ac) ac.style.display = 'none';
+    const fi = document.getElementById('cfgImportFileInput'); if (fi) fi.value = '';
+    o.classList.add('active');
+  }
+  function closeConfigImport() { const o = document.getElementById('cfgImportOverlay'); if (o) o.classList.remove('active'); _cfgImportData = null; }
+  function importConfig(_event) { openConfigImport(); }
+
+  function _loadCfgImportSchema() {
+    const d = document.getElementById('cfgSchemaDisplay'); if (!d || d._loaded) return;
+    d._loaded = true;
+    fetch('/api/config/schema').then(r => r.json()).then(resp => {
+      if (resp.ok) {
+        d.textContent = JSON.stringify(resp.schema, null, 2);
+        const ex = document.getElementById('cfgExampleDisplay');
+        if (ex) ex.textContent = JSON.stringify(resp.example, null, 2);
+      }
+    }).catch(() => {});
+  }
+  function toggleCfgImportSchema() {
+    _loadCfgImportSchema();
+    const c = document.getElementById('cfgSchemaContent'), b = document.getElementById('cfgSchemaToggle');
+    if (c.style.display === 'none') { c.style.display = ''; b.textContent = _t('ui.config_import.hide_schema'); }
+    else { c.style.display = 'none'; b.textContent = _t('ui.config_import.show_schema'); }
+  }
+  function toggleCfgImportExample() {
+    const c = document.getElementById('cfgExampleDisplay'), b = document.getElementById('cfgExampleToggle');
+    if (c.style.display === 'none') { c.style.display = ''; b.textContent = _t('ui.config_import.hide_example'); }
+    else { c.style.display = 'none'; b.textContent = _t('ui.config_import.show_example'); }
+  }
+
+  async function handleConfigImportFile(event) {
+    const file = (event.target && event.target.files) ? event.target.files[0] : null;
+    if (!file) return;
+    const status = document.getElementById('cfgImportStatus');
+    const actions = document.getElementById('cfgImportActions');
+
+    if (!file.name.endsWith('.json')) {
+      status.innerHTML = '<div class="rc-validation-msg error rc-validation-msg-block">' + esc(_t('ui.config_import.wrong_format')) + '</div>';
+      status.style.display = '';
+      actions.style.display = 'none';
+      return;
+    }
+
+    status.innerHTML = '<div class="rc-validation-msg rc-validation-msg-block" style="color:var(--text-secondary);">⏳ ' + esc(_t('ui.config_import.validating')) + '</div>';
+    status.style.display = '';
+    actions.style.display = 'none';
+
+    try {
+      const text = await file.text();
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (parseErr) {
+        status.innerHTML = '<div class="rc-validation-msg error rc-validation-msg-block">❌ ' + esc(_t('ui.config_import.parse_error')) + '</div>';
+        return;
+      }
+
+      const res = await fetch('/api/config/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parsed)
+      });
+      const result = await res.json();
+
+      if (result.ok) {
+        _cfgImportData = parsed;
+        status.innerHTML = '<div class="rc-validation-msg success rc-validation-msg-block">✅ ' + esc(_t('ui.config_import.valid')) + '</div>';
+        actions.style.display = '';
+      } else {
+        _cfgImportData = null;
+        let html = '<div class="rc-validation-msg error rc-validation-msg-block">❌ <strong>' + esc(_t('ui.config_import.invalid')) + '</strong>';
+        if (result.errors && result.errors.length > 0) {
+          html += '<ul class="rc-import-error-list">';
+          result.errors.forEach(function(e) { html += '<li>' + esc(e) + '</li>'; });
+          html += '</ul>';
+        }
+        html += '</div>';
+        status.innerHTML = html;
+        actions.style.display = 'none';
+      }
+    } catch (err) {
+      status.innerHTML = '<div class="rc-validation-msg error rc-validation-msg-block">❌ ' + esc(_t('ui.config_import.error')) + '</div>';
+      actions.style.display = 'none';
+    }
+    if (event.target) event.target.value = '';
+  }
+
+  async function configImportReplace() {
+    if (!_cfgImportData) return;
+    closeConfigImport(); draft = _cfgImportData; _cfgImportData = null; _cfgPreviewBackup = null;
+    hidePreviewBadge(); populateForm(); updateJsonEditor(); await pushDraftAndRefresh();
+  }
+  function configImportPreview() {
+    if (!_cfgImportData) return;
+    _cfgPreviewBackup = JSON.parse(JSON.stringify(draft));
+    closeConfigImport(); draft = _cfgImportData; _cfgImportData = null;
+    populateForm(); updateJsonEditor(); validateDraft(); showPreviewBadge();
+  }
+  function discardConfigPreview() {
+    if (_cfgPreviewBackup) { draft = _cfgPreviewBackup; _cfgPreviewBackup = null; populateForm(); updateJsonEditor(); validateDraft(); }
+    hidePreviewBadge();
+  }
+  function showPreviewBadge() { const el = document.getElementById('previewBadge'); if (el) el.classList.remove('hidden'); }
+  function hidePreviewBadge() { const el = document.getElementById('previewBadge'); if (el) el.classList.add('hidden'); _cfgPreviewBackup = null; }
+
+  /* Dropzone drag & drop for config import */
+  (function() {
+    const dz = document.getElementById('cfgImportDropzone'); if (!dz) return;
+    dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', function() { dz.classList.remove('drag-over'); });
+    dz.addEventListener('drop', function(e) { e.preventDefault(); dz.classList.remove('drag-over');
+      if (e.dataTransfer.files.length > 0) handleConfigImportFile({ target: { files: e.dataTransfer.files } });
+    });
+  })();
+
+  async function exportConfig(){
+    const blob = new Blob([JSON.stringify(draft,null,2)],{type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='releaseboard.json'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function exportHTML(){
+    const res = await fetch('/api/export/html');
+    const html = await res.text();
+    const blob = new Blob([html],{type:'text/html'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='dashboard.html'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ===== Tag Export (YAML) =====
+  const _TE_FILENAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
+  function _teGetFilename() {
+    return (document.getElementById('tagExportFilename').value || '').trim();
+  }
+
+  function _teBuildYaml(includeNoTag) {
+    const repos = Object.values(REPO_DATA);
+    const lines = [];
+    let included = 0, skipped = 0, total = 0;
+    repos.forEach(function(r) {
+      if (!r.isGitlab) return;
+      total++;
+      if (r.latestTag) {
+        lines.push(r.name + ':');
+        lines.push('  enabled: true');
+        lines.push('  AppVersion: ' + r.latestTag);
+        lines.push('');
+        included++;
+      } else if (includeNoTag) {
+        lines.push(r.name + ':');
+        lines.push('  enabled: false');
+        lines.push('  AppVersion: ""');
+        lines.push('');
+        included++;
+      } else {
+        skipped++;
+      }
+    });
+    return { yaml: lines.join('\n'), included: included, skipped: skipped, total: total };
+  }
+
+  function _tagExportRefresh() {
+    var fn = _teGetFilename();
+    var errEl = document.getElementById('tagExportFilenameError');
+    var dlBtn = document.getElementById('tagExportDownloadBtn');
+    var valid = fn.length > 0 && _TE_FILENAME_RE.test(fn);
+    errEl.style.display = valid || fn.length === 0 ? 'none' : 'block';
+    errEl.textContent = valid ? '' : _t('ui.tag_export.filename_invalid');
+    dlBtn.disabled = !valid;
+
+    var incl = document.getElementById('tagExportIncludeNoTag').checked;
+    var result = _teBuildYaml(incl);
+    document.getElementById('tagExportPreview').textContent = result.yaml || _t('ui.tag_export.no_data');
+    var statsEl = document.getElementById('tagExportStats');
+    statsEl.innerHTML =
+      '<span class="te-stat"><span class="te-stat-value">' + result.total + '</span> ' + _t('ui.tag_export.stat_gitlab') + '</span>' +
+      '<span class="te-stat"><span class="te-stat-value">' + result.included + '</span> ' + _t('ui.tag_export.stat_included') + '</span>' +
+      (result.skipped > 0 ? '<span class="te-stat"><span class="te-stat-value">' + result.skipped + '</span> ' + _t('ui.tag_export.stat_skipped') + '</span>' : '');
+    _teHideStatus();
+  }
+
+  function _teShowStatus(msg, isError) {
+    var el = document.getElementById('tagExportStatus');
+    el.textContent = msg;
+    el.className = 'te-status ' + (isError ? 'error' : 'success');
+    setTimeout(function() { el.className = 'te-status'; }, 4000);
+  }
+  function _teHideStatus() {
+    document.getElementById('tagExportStatus').className = 'te-status';
+  }
+
+  function openTagExport() {
+    // Default filename based on current release target
+    var input = document.getElementById('tagExportFilename');
+    if (!input.value) {
+      var now = new Date();
+      var y = now.getFullYear();
+      var m = String(now.getMonth() + 1).padStart(2, '0');
+      input.value = y + '.' + m + '-release';
+    }
+    document.getElementById('tagExportOverlay').classList.add('active');
+    _tagExportRefresh();
+    input.focus();
+  }
+
+  function closeTagExport() {
+    document.getElementById('tagExportOverlay').classList.remove('active');
+  }
+
+  function tagExportDownload() {
+    var fn = _teGetFilename();
+    if (!fn || !_TE_FILENAME_RE.test(fn)) return;
+    var incl = document.getElementById('tagExportIncludeNoTag').checked;
+    var result = _teBuildYaml(incl);
+    if (!result.yaml) { _teShowStatus(_t('ui.tag_export.no_data'), true); return; }
+    var blob = new Blob([result.yaml], { type: 'text/yaml' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = fn + '.yaml';
+    a.click();
+    URL.revokeObjectURL(url);
+    _teShowStatus(_t('ui.tag_export.downloaded'));
+  }
+
+  function tagExportCopy() {
+    var incl = document.getElementById('tagExportIncludeNoTag').checked;
+    var result = _teBuildYaml(incl);
+    if (!result.yaml) { _teShowStatus(_t('ui.tag_export.no_data'), true); return; }
+    navigator.clipboard.writeText(result.yaml).then(function() {
+      _teShowStatus(_t('ui.tag_export.copied'));
+    }).catch(function() {
+      _teShowStatus(_t('ui.tag_export.copy_failed'), true);
+    });
+  }
+

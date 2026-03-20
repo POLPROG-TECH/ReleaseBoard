@@ -1,0 +1,146 @@
+{% if vm.interactive %}
+<!-- ===== Config Drawer ===== -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="RB.toggleDrawer()"></div>
+<div class="config-drawer" id="configDrawer" role="dialog" aria-modal="true" aria-labelledby="configDrawerTitle">
+  <div class="drawer-header">
+    <h2 id="configDrawerTitle">⚙ <span data-i18n="ui.configuration">Configuration</span> <span class="drawer-draft-badge hidden" id="drawerDraftBadge" data-i18n="ui.draft">Draft</span></h2>
+    <button class="drawer-close" onclick="RB.toggleDrawer()" aria-label="Close configuration drawer" data-i18n-aria-label="ui.aria.close_drawer">✕</button>
+  </div>
+  <div class="drawer-tabs">
+    <button class="drawer-tab active" data-tab="form" onclick="RB.switchTab('form')" data-i18n="ui.config.tab.settings">Form</button>
+    <button class="drawer-tab" data-tab="json" onclick="RB.switchTab('json')">{ } JSON</button>
+    <button class="drawer-tab" data-tab="effective" onclick="RB.switchTab('effective')" data-i18n="ui.config.tab.effective">Effective</button>
+  </div>
+  <div class="drawer-body" id="drawerBody">
+    <!-- Validation -->
+    <div class="validation-panel clean" id="validationPanel"></div>
+
+    <!-- Form tab -->
+    <div id="tabForm">
+      <!-- Release -->
+      <div class="cfg-section">
+        <div class="cfg-section-title" data-i18n="ui.config.release">Release</div>
+        <div class="cfg-field"><label class="cfg-label" for="cfg-release-name" data-i18n="ui.config.release_name">Release Name</label><span class="required-star">*</span><input class="cfg-input" id="cfg-release-name" data-path="release.name" type="text" aria-required="true" aria-describedby="cfg-release-name-help"><div class="cfg-help" id="cfg-release-name-help" data-i18n="ui.config.release_name_help">Human-readable release name</div></div>
+        <div class="cfg-row">
+          <div class="cfg-field"><label class="cfg-label" for="cfg-target-month" data-i18n="ui.config.target_month">Target Month</label><select class="cfg-select" id="cfg-target-month" data-path="release.target_month"><option value="1" data-i18n="ui.month.january">January</option><option value="2" data-i18n="ui.month.february">February</option><option value="3" data-i18n="ui.month.march">March</option><option value="4" data-i18n="ui.month.april">April</option><option value="5" data-i18n="ui.month.may">May</option><option value="6" data-i18n="ui.month.june">June</option><option value="7" data-i18n="ui.month.july">July</option><option value="8" data-i18n="ui.month.august">August</option><option value="9" data-i18n="ui.month.september">September</option><option value="10" data-i18n="ui.month.october">October</option><option value="11" data-i18n="ui.month.november">November</option><option value="12" data-i18n="ui.month.december">December</option></select></div>
+          <div class="cfg-field"><label class="cfg-label" for="cfg-target-year" data-i18n="ui.config.target_year">Target Year</label><input class="cfg-input" id="cfg-target-year" data-path="release.target_year" type="number" min="2024" max="2100"></div>
+        </div>
+        <div class="cfg-field"><label class="cfg-label" for="cfg-branch-pattern" data-i18n="ui.config.branch_pattern">Branch Pattern</label><input class="cfg-input text-mono" id="cfg-branch-pattern" data-path="release.branch_pattern" type="text" placeholder="release/{YYYY}.{MM}" aria-describedby="cfg-branch-pattern-help"><div class="cfg-help" id="cfg-branch-pattern-help" data-i18n="ui.config.branch_pattern_help">Variables: {YYYY}, {YY}, {MM}, {M}</div></div>
+      </div>
+      <!-- Settings -->
+      <div class="cfg-section">
+        <div class="cfg-row">
+          <div class="cfg-field"><label class="cfg-label" for="cfg-stale-days" data-i18n="ui.config.stale_days">Stale Threshold (days)</label><input class="cfg-input" id="cfg-stale-days" data-path="settings.stale_threshold_days" type="number" min="1"></div>
+          <div class="cfg-field"><label class="cfg-label" for="cfg-timeout" data-i18n="ui.config.timeout_seconds">Timeout (seconds)</label><input class="cfg-input" id="cfg-timeout" data-path="settings.timeout_seconds" type="number" min="5" max="300"></div>
+          <div class="cfg-field"><label class="cfg-label" for="cfg-max-concurrent" data-i18n="ui.config.max_concurrent">Max Concurrent</label><input class="cfg-input" id="cfg-max-concurrent" data-path="settings.max_concurrent" type="number" min="1" max="20"></div>
+        </div>
+        <div class="cfg-field"><label class="cfg-label" for="cfg-output-path" data-i18n="ui.config.output_path">Output Path</label><input class="cfg-input text-mono" id="cfg-output-path" data-path="settings.output_path" type="text"></div>
+        <div class="cfg-field"><label class="cfg-label" for="cfg-repo-root-url" data-i18n="ui.config.repository_root_url">Repository Root URL</label><span class="cfg-tooltip-trigger" tabindex="0" data-i18n-tooltip="ui.config.repo_root_url_tooltip">?</span><input class="cfg-input text-mono" id="cfg-repo-root-url" data-path="settings.repository_root_url" type="text"></div>
+        </div>
+      <!-- Layers -->
+      <div class="cfg-section">
+        <div class="cfg-section-title" data-i18n="ui.config.layers">Layers</div>
+        <div id="layersList"></div>
+        <button class="cfg-add-btn" onclick="RB.addLayer()">+ Add Layer</button>
+      </div>
+      <!-- Repositories -->
+      <div class="cfg-section">
+        <div class="cfg-section-title" data-i18n="ui.config.repositories">Repositories</div>
+        <div id="reposList"></div>
+      </div>
+    </div>
+
+    <!-- JSON tab -->
+    <div id="tabJson" class="hidden">
+      <div class="json-editor-wrap">
+        <div class="json-editor-main">
+          <textarea class="cfg-textarea" id="jsonEditor" spellcheck="false"></textarea>
+          <div class="json-validation-bar" id="jsonValBar">
+            <span class="val-ok hidden" id="jsonValOk">✓ Valid JSON</span>
+            <span class="val-error hidden" id="jsonValErr"></span>
+            <span class="val-count" id="jsonValCount"></span>
+          </div>
+          <ul class="json-validation-errors hidden" id="jsonValErrors"></ul>
+        </div>
+        <div class="json-legend" id="jsonLegend">
+          <div class="json-legend-title" data-i18n="ui.config.field_reference">Field Reference</div>
+          <div class="json-legend-section"><div class="json-legend-section-label">release</div>
+            <div class="json-legend-field"><span class="field-name">name</span><span class="field-type">string</span><span class="field-req">required</span></div>
+            <div class="json-legend-field"><span class="field-desc" data-i18n="ui.config.field_desc.release_name">Display name for the release</span></div>
+            <div class="json-legend-field"><span class="field-name">target_month</span><span class="field-type">integer 1–12</span><span class="field-req">required</span></div>
+            <div class="json-legend-field"><span class="field-name">target_year</span><span class="field-type">integer 2000–2100</span><span class="field-req">required</span></div>
+            <div class="json-legend-field"><span class="field-name">branch_pattern</span><span class="field-type">string</span></div>
+            <div class="json-legend-field"><span class="field-desc" data-i18n="ui.config.field_desc.branch_pattern_vars">Global branch pattern. Variables: {YYYY}, {YY}, {MM}, {M}</span></div>
+          </div>
+          <div class="json-legend-section"><div class="json-legend-section-label">layers[]</div>
+            <div class="json-legend-field"><span class="field-name">id</span><span class="field-type">string ^[a-z][a-z0-9_-]*$</span><span class="field-req">required</span></div>
+            <div class="json-legend-field"><span class="field-name">label</span><span class="field-type">string</span><span class="field-req">required</span></div>
+            <div class="json-legend-field"><span class="field-name">branch_pattern</span><span class="field-type">string</span></div>
+            <div class="json-legend-field"><span class="field-desc" data-i18n="ui.config.field_desc.layer_branch_override">Overrides global. Inherited by repos in this layer.</span></div>
+            <div class="json-legend-field"><span class="field-name">color</span><span class="field-type">hex #RRGGBB</span></div>
+            <div class="json-legend-field"><span class="field-name">order</span><span class="field-type">integer</span></div>
+            <div class="json-legend-field"><span class="field-name">repository_root_url</span><span class="field-type">string</span></div>
+          </div>
+          <div class="json-legend-section"><div class="json-legend-section-label">repositories[]</div>
+            <div class="json-legend-field"><span class="field-name">name</span><span class="field-type">string</span><span class="field-req">required</span></div>
+            <div class="json-legend-field"><span class="field-desc" data-i18n="ui.config.field_desc.name_auto_derived">Auto-derived from URL if empty</span></div>
+            <div class="json-legend-field"><span class="field-name">url</span><span class="field-type">string</span><span class="field-req">required</span></div>
+            <div class="json-legend-field"><span class="field-name">layer</span><span class="field-type">string (layer id)</span><span class="field-req">required</span></div>
+            <div class="json-legend-field"><span class="field-name">branch_pattern</span><span class="field-type">string</span></div>
+            <div class="json-legend-field"><span class="field-desc" data-i18n="ui.config.field_desc.repo_branch_override">Overrides layer/global pattern</span></div>
+            <div class="json-legend-field"><span class="field-name">default_branch</span><span class="field-type">string</span></div>
+            <div class="json-legend-field"><span class="field-desc" data-i18n="ui.config.field_desc.default_branch">Default: "main"</span></div>
+            <div class="json-legend-field"><span class="field-name">notes</span><span class="field-type">string</span></div>
+          </div>
+          <div class="json-legend-section"><div class="json-legend-section-label">branding</div>
+            <div class="json-legend-field"><span class="field-name">title</span><span class="field-type">string</span></div>
+            <div class="json-legend-field"><span class="field-name">subtitle</span><span class="field-type">string</span></div>
+            <div class="json-legend-field"><span class="field-name">company</span><span class="field-type">string</span></div>
+            <div class="json-legend-field"><span class="field-name">primary_color</span><span class="field-type">hex</span></div>
+            <div class="json-legend-field"><span class="field-name">secondary_color</span><span class="field-type">hex</span></div>
+            <div class="json-legend-field"><span class="field-name">tertiary_color</span><span class="field-type">hex</span></div>
+          </div>
+          <div class="json-legend-section"><div class="json-legend-section-label">settings</div>
+            <div class="json-legend-field"><span class="field-name">stale_threshold_days</span><span class="field-type">integer ≥1</span></div>
+            <div class="json-legend-field"><span class="field-name">output_path</span><span class="field-type">string</span></div>
+            <div class="json-legend-field"><span class="field-name">theme</span><span class="field-type">enum: light|dark|midnight|system</span></div>
+            <div class="json-legend-field"><span class="field-name">timeout_seconds</span><span class="field-type">integer 5–300</span></div>
+            <div class="json-legend-field"><span class="field-name">max_concurrent</span><span class="field-type">integer 1–20</span></div>
+            <div class="json-legend-field"><span class="field-name">repository_root_url</span><span class="field-type">string</span></div>
+          </div>
+          <div class="json-legend-section"><div class="json-legend-section-label">author</div>
+            <div class="json-legend-field"><span class="field-name">name</span><span class="field-type">string</span></div>
+            <div class="json-legend-field"><span class="field-name">role</span><span class="field-type">string</span></div>
+            <div class="json-legend-field"><span class="field-name">url</span><span class="field-type">string</span></div>
+            <div class="json-legend-field"><span class="field-name">tagline</span><span class="field-type">string</span></div>
+            <div class="json-legend-field"><span class="field-name">copyright</span><span class="field-type">string</span></div>
+          </div>
+          <div class="json-legend-section"><div class="json-legend-section-label">layout</div>
+            <div class="json-legend-field"><span class="field-name">default_template</span><span class="field-type">string</span></div>
+            <div class="json-legend-field"><span class="field-desc" data-i18n="ui.config.field_desc.layout_template">One of: default, executive, release-manager, engineering, compact</span></div>
+            <div class="json-legend-field"><span class="field-name">section_order</span><span class="field-type">string[]</span></div>
+            <div class="json-legend-field"><span class="field-desc" data-i18n="ui.config.field_desc.layout_sections">Section IDs: metrics, charts, filters, attention, layer-*, summary</span></div>
+            <div class="json-legend-field"><span class="field-name">enable_drag_drop</span><span class="field-type">boolean</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="cfg-help cfg-help-spacing">Edit raw JSON configuration. Schema validation runs automatically. Field reference below.</div>
+      <div class="cfg-reset-row">
+        <button class="tb-btn no-wrap" onclick="RB.resetToDefaults()" data-i18n="ui.config.reset_config">🗑 Reset configuration</button>
+        <span class="cfg-hint" data-i18n="ui.config.reset_hint">Clears the entire configuration and creates 3 default layers (UI, API, DB).</span>
+      </div>
+    </div>
+
+    <!-- Effective tab -->
+    <div id="tabEffective" class="hidden">
+      <div class="effective-tab" id="effectiveContent"></div>
+    </div>
+  </div>
+  <div class="drawer-footer">
+    <button class="tb-btn primary" id="btnApplyConfig" onclick="RB.applyConfig()" data-i18n="ui.config.apply_analyze">Apply & Analyze</button>
+    <button class="tb-btn" id="btnSaveConfig" onclick="RB.saveConfig()" data-i18n="ui.config.save">Save</button>
+    <button class="tb-btn" id="btnDiscardConfig" onclick="RB.discardConfig()" data-i18n="ui.config.discard">↩ Discard Changes</button>
+    <button class="tb-btn" onclick="RB.openConfigImport()" data-i18n="ui.config.import">Import</button>
+  </div>
+</div>
+{% endif %}

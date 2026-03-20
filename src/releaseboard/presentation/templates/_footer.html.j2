@@ -1,0 +1,16 @@
+<footer class="rb-footer">
+  <div class="container">
+    <div class="rb-footer-copyright">
+      &copy; {{ vm.generated_at[:4] if vm.generated_at else "2026" }} <a class="rb-footer-author" href="https://polprog.pl/" target="_blank">POLPROG</a>.
+      <span data-i18n="ui.footer.all_rights">All rights reserved.</span>
+    </div>
+    <div class="rb-footer-tools">
+      <span data-i18n="ui.footer.built_with">Dashboard built with</span>
+      <a class="rb-footer-brand" href="https://github.com/polprog-tech/ReleaseBoard" target="_blank">ReleaseBoard</a>
+      v{{ vm.version }}
+      &amp;
+      <a class="rb-footer-brand" href="https://github.com/polprog-tech/ReleasePilot" target="_blank">ReleasePilot</a>
+      {% if vm.rp_version and vm.rp_version != '0.0.0' %}v{{ vm.rp_version }}{% endif %}
+    </div>
+  </div>
+</footer>

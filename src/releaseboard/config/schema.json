@@ -1,0 +1,363 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://releaseboard.internal/config-schema.json",
+  "title": "ReleaseBoard Configuration",
+  "description": "Configuration schema for the ReleaseBoard release-readiness dashboard",
+  "type": "object",
+  "required": ["release", "repositories"],
+  "properties": {
+    "release": {
+      "type": "object",
+      "description": "Release target definition",
+      "required": ["name", "target_month", "target_year"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human-readable release name",
+          "minLength": 1,
+          "examples": ["March 2025 Release", "Q1 2025"]
+        },
+        "target_month": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12,
+          "description": "Target release month (1–12)"
+        },
+        "target_year": {
+          "type": "integer",
+          "minimum": 2000,
+          "maximum": 2100,
+          "description": "Target release year"
+        },
+        "branch_pattern": {
+          "type": "string",
+          "description": "Global branch naming pattern. Variables: {YYYY}, {YY}, {MM}, {M}",
+          "default": "release/{YYYY}.{MM}",
+          "examples": ["release/{YYYY}.{MM}", "release/{MM}.{YYYY}", "rel/{MM}-{YYYY}"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "layers": {
+      "type": "array",
+      "description": "Repository layer/category definitions",
+      "items": {
+        "type": "object",
+        "required": ["id", "label"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]*$",
+            "description": "Unique layer identifier (lowercase, alphanumeric, hyphens, underscores)"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Display label for the layer"
+          },
+          "branch_pattern": {
+            "type": "string",
+            "description": "Layer-level branch pattern override"
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6,8}$",
+            "description": "Hex color for layer badge/charts (6 or 8 digit)"
+          },
+          "order": {
+            "type": "integer",
+            "default": 0,
+            "description": "Display order (lower = first)"
+          },
+          "repository_root_url": {
+            "type": "string",
+            "description": "Layer-level base URL for repositories. Overrides the global repository_root_url for repos in this layer."
+          }
+        },
+        "additionalProperties": false
+      },
+      "default": []
+    },
+    "repositories": {
+      "type": "array",
+      "description": "Repository definitions",
+      "items": {
+        "type": "object",
+        "required": ["name", "url", "layer"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Short repository/application name"
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Repository URL (HTTPS, SSH, local path) or slug relative to repository_root_url"
+          },
+          "layer": {
+            "type": "string",
+            "description": "Layer ID this repository belongs to"
+          },
+          "branch_pattern": {
+            "type": "string",
+            "description": "Repository-level branch pattern override"
+          },
+          "default_branch": {
+            "type": "string",
+            "default": "main",
+            "description": "Default/base branch name"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Optional notes about this repository"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "branding": {
+      "type": "object",
+      "description": "Dashboard branding and visual settings",
+      "properties": {
+        "title": {
+          "type": "string",
+          "default": "ReleaseBoard",
+          "description": "Dashboard title"
+        },
+        "subtitle": {
+          "type": "string",
+          "default": "Release Readiness Dashboard",
+          "description": "Dashboard subtitle"
+        },
+        "company": {
+          "type": "string",
+          "default": "",
+          "description": "Company name for branding"
+        },
+        "primary_color": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6,8}$",
+          "default": "#fb6400",
+          "description": "Primary brand color (hex)"
+        },
+        "accent_color": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6,8}$",
+          "default": "#fb6400",
+          "description": "Deprecated alias for primary_color (hex)"
+        },
+        "secondary_color": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6,8}$",
+          "default": "#002754e6",
+          "description": "Secondary color for headings and dark accents (hex)"
+        },
+        "tertiary_color": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6,8}$",
+          "default": "#10b981",
+          "description": "Tertiary color for success states and supplementary accents (hex)"
+        },
+        "logo_path": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Path to logo image (embedded as base64)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "settings": {
+      "type": "object",
+      "description": "Application behaviour settings",
+      "properties": {
+        "stale_threshold_days": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 14,
+          "description": "Days since last commit before a branch is considered stale"
+        },
+        "output_path": {
+          "type": "string",
+          "default": "output/dashboard.html",
+          "description": "Output file path for the HTML dashboard"
+        },
+        "theme": {
+          "type": "string",
+          "enum": ["light", "dark", "midnight", "system"],
+          "default": "system",
+          "description": "Default dashboard theme"
+        },
+        "verbose": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable verbose logging"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 300,
+          "default": 30,
+          "description": "Timeout for git operations per repository"
+        },
+        "max_concurrent": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 5,
+          "description": "Maximum concurrent git operations"
+        },
+        "repository_root_url": {
+          "type": "string",
+          "default": "",
+          "description": "Base URL for repositories. Repo URLs that are relative slugs will be prefixed with this root."
+        }
+      },
+      "additionalProperties": false
+    },
+    "release_calendar": {
+      "type": "object",
+      "description": "Release calendar planning data for environment promotion schedule",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": "",
+          "description": "Calendar name (e.g. 'Q2 2026 Release Plan')"
+        },
+        "year": {
+          "type": "integer",
+          "minimum": 2000,
+          "maximum": 2100,
+          "description": "Planning year"
+        },
+        "notes": {
+          "type": "string",
+          "default": "",
+          "description": "General notes for the release calendar"
+        },
+        "months": {
+          "type": "array",
+          "description": "Per-month phase date entries (legacy monthly view)",
+          "items": {
+            "type": "object",
+            "required": ["month"],
+            "properties": {
+              "month": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 12,
+                "description": "Month number (1–12)"
+              },
+              "year": {
+                "type": "integer",
+                "minimum": 2000,
+                "maximum": 2100,
+                "description": "Optional year for this month entry"
+              },
+              "phases": {
+                "type": "object",
+                "description": "Date for each release milestone (YYYY-MM-DD)",
+                "properties": {
+                  "dev": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "sit": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "uat": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "preprod": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "prod": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "feature_freeze": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "promote_sit": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "sit_start": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "sit_end": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "fov_readiness": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "promote_uat": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "uat_end": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "hard_code_freeze": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "uat2_install": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "uat2_end": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+                  "prod_install": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" }
+                },
+                "additionalProperties": false
+              },
+              "notes": {
+                "type": "string",
+                "default": "",
+                "description": "Notes for this month"
+              }
+            },
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "events": {
+          "type": "array",
+          "description": "Arbitrary release events/milestones not bound to a monthly grid",
+          "items": {
+            "type": "object",
+            "required": ["date", "phase"],
+            "properties": {
+              "date": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "description": "Event date in YYYY-MM-DD format"
+              },
+              "phase": {
+                "type": "string",
+                "enum": ["dev", "sit", "uat", "preprod", "prod", "feature_freeze", "promote_sit", "sit_start", "sit_end", "fov_readiness", "promote_uat", "uat_end", "hard_code_freeze", "uat2_install", "uat2_end", "prod_install"],
+                "description": "Release milestone type"
+              },
+              "label": {
+                "type": "string",
+                "default": "",
+                "maxLength": 200,
+                "description": "Short label or description for this event"
+              },
+              "notes": {
+                "type": "string",
+                "default": "",
+                "maxLength": 500,
+                "description": "Additional notes for this event"
+              }
+            },
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "display": {
+          "type": "object",
+          "description": "Display and export preferences",
+          "properties": {
+            "show_notes": { "type": "boolean", "default": true },
+            "show_weekdays": { "type": "boolean", "default": true },
+            "show_quarter_headers": { "type": "boolean", "default": true }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "layout": {
+      "type": "object",
+      "description": "Dashboard layout preferences. Templates are stored client-side; this section defines defaults.",
+      "properties": {
+        "default_template": {
+          "type": "string",
+          "default": "default",
+          "description": "Active layout template ID on initial load",
+          "examples": ["default", "executive", "release-manager", "engineering", "compact"]
+        },
+        "section_order": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Default ordering of dashboard section IDs. Use 'layer-*' as wildcard for all layer sections.",
+          "examples": [["score", "metrics", "charts", "filters", "attention", "layer-*", "summary"]]
+        },
+        "enable_drag_drop": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether drag-and-drop layout reordering is available"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

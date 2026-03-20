@@ -1,0 +1,186 @@
+/* ============================================================
+   Midnight Theme — Comprehensive Component Overrides
+   ============================================================ */
+
+/* Midnight: Toolbar */
+[data-theme="midnight"] .toolbar { background: var(--bg-primary); backdrop-filter: blur(12px); border-bottom-color: var(--border); }
+[data-theme="midnight"] .tb-btn { border-color: var(--border); background: var(--bg-card); color: var(--text-secondary); }
+[data-theme="midnight"] .tb-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: color-mix(in srgb, var(--primary) 27%, transparent); }
+[data-theme="midnight"] .tb-btn.primary { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }
+[data-theme="midnight"] .tb-btn.primary:hover { filter: brightness(0.9); }
+
+/* Midnight: Cards & surfaces */
+[data-theme="midnight"] .metric-card::before { opacity: 0.3; }
+[data-theme="midnight"] .summary-section { border-color: var(--border); }
+[data-theme="midnight"] .filters-bar { border-color: var(--border); background: var(--bg-card); }
+[data-theme="midnight"] .layer-section .readiness-bar { background: var(--bg-tertiary); }
+
+/* Midnight: Repo table */
+[data-theme="midnight"] .repo-table-container { border-color: var(--border); }
+[data-theme="midnight"] .repo-table thead { background: var(--bg-secondary); }
+[data-theme="midnight"] .repo-table th { color: var(--text-tertiary); }
+[data-theme="midnight"] .repo-table tbody tr:hover { background: var(--bg-tertiary); }
+[data-theme="midnight"] .branch-name { background: var(--bg-tertiary); color: var(--text-secondary); }
+[data-theme="midnight"] .status-badge { border: 1px solid transparent; }
+
+/* Midnight: Modal & drawer */
+[data-theme="midnight"] .modal-overlay { background: rgba(0,0,0,.7); }
+[data-theme="midnight"] .modal { border-color: var(--border); box-shadow: 0 24px 64px rgba(0,0,0,.5), 0 0 1px color-mix(in srgb, var(--primary) 15%, transparent); }
+[data-theme="midnight"] .config-drawer { border-left-color: var(--border); box-shadow: -8px 0 32px rgba(0,0,0,.4); }
+[data-theme="midnight"] .drawer-overlay { background: rgba(0,0,0,.6); }
+
+/* Midnight: Section titles use accent */
+[data-theme="midnight"] .detail-group-title { color: var(--primary); border-left-color: var(--primary); background: color-mix(in srgb, var(--primary) 3%, transparent); }
+[data-theme="midnight"] .cfg-section-title { color: var(--primary); border-left-color: var(--primary); background: color-mix(in srgb, var(--primary) 3%, transparent); }
+[data-theme="midnight"] .eff-section-title { color: var(--primary); border-left-color: var(--primary); background: color-mix(in srgb, var(--primary) 3%, transparent); }
+
+/* Midnight: Environment milestones */
+[data-theme="midnight"] .env-milestones { border-color: var(--border); }
+[data-theme="midnight"] .env-dot { box-shadow: 0 0 0 3px var(--bg-primary), 0 0 0 4px var(--border); }
+[data-theme="midnight"] .env-step.current .env-dot { box-shadow: 0 0 0 3px var(--bg-primary), 0 0 0 5px var(--primary), 0 0 16px color-mix(in srgb, var(--primary) 27%, transparent); }
+[data-theme="midnight"] .env-connector.filled { background: linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 85%, black)); box-shadow: 0 0 8px color-mix(in srgb, var(--primary) 20%, transparent); }
+[data-theme="midnight"] .env-current-marker { color: var(--primary); }
+
+/* Midnight: Wizard overlays */
+[data-theme="midnight"] .wizard-overlay { background: rgba(0,0,0,.65); }
+[data-theme="midnight"] .wizard-panel { border: 1px solid var(--border); box-shadow: 0 24px 64px rgba(0,0,0,.5); }
+[data-theme="midnight"] .rp-wizard-overlay { background: rgba(0,0,0,.65); }
+[data-theme="midnight"] .rp-wizard-panel { border-color: var(--border); }
+[data-theme="midnight"] .rc-wizard-overlay { background: rgba(0,0,0,.6); }
+[data-theme="midnight"] .rc-wizard-panel { border-color: var(--border); }
+
+/* Midnight: Wizard buttons primary */
+[data-theme="midnight"] .wizard-footer .wiz-btn.primary { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }
+[data-theme="midnight"] .wizard-footer .wiz-btn.primary:hover { filter: brightness(0.9); }
+[data-theme="midnight"] .wiz-confirm-actions .wiz-btn.primary { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }
+[data-theme="midnight"] .wiz-add-layer:hover { border-color: var(--primary); color: var(--primary); }
+
+/* Midnight: Step indicators */
+[data-theme="midnight"] .wizard-step-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+[data-theme="midnight"] .wizard-step-tab.active .step-num { background: var(--primary); color: var(--text-inverse); }
+[data-theme="midnight"] .rp-wizard-step-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+[data-theme="midnight"] .rp-wizard-step-tab.active .rp-step-num { background: var(--primary); color: var(--text-inverse); }
+[data-theme="midnight"] .rc-wizard-step-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+[data-theme="midnight"] .rc-wizard-step-tab.active .rc-step-num { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }
+
+/* Midnight: Config drawer tabs */
+[data-theme="midnight"] .drawer-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+[data-theme="midnight"] .drawer-footer { background: var(--bg-secondary); }
+
+/* Midnight: Buttons with accent */
+[data-theme="midnight"] .cfg-add-btn { border-color: var(--primary); color: var(--primary); background: color-mix(in srgb, var(--primary) 7%, transparent); }
+[data-theme="midnight"] .cfg-add-btn:hover { background: var(--primary); color: var(--text-inverse); }
+[data-theme="midnight"] .confirm-btn.primary { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }
+[data-theme="midnight"] .confirm-btn.primary:hover { filter: brightness(0.9); }
+
+/* Midnight: Release badge */
+[data-theme="midnight"] .release-badge { background: color-mix(in srgb, var(--primary) 7%, transparent); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 20%, transparent); }
+
+/* Midnight: Layout template buttons */
+[data-theme="midnight"] .layout-template-btn.active { background: color-mix(in srgb, var(--primary) 8%, transparent); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 27%, transparent); }
+[data-theme="midnight"] .layout-template-btn:hover { border-color: color-mix(in srgb, var(--primary) 27%, transparent); }
+
+/* Midnight: Effective source badges */
+[data-theme="midnight"] .eff-source.layer { background: color-mix(in srgb, var(--primary) 8%, transparent); color: var(--primary); }
+[data-theme="midnight"] .eff-source.repo { background: #fbbf2415; color: #fbbf24; }
+[data-theme="midnight"] .eff-source.derived { background: #38bdf815; color: #38bdf8; }
+
+/* Midnight: JSON validation */
+[data-theme="midnight"] .json-validation-bar .val-ok { color: var(--tertiary); }
+[data-theme="midnight"] .json-validation-bar .val-error { color: #f87171; }
+[data-theme="midnight"] .json-validation-errors { background: #3b111118; border-top-color: #5b2020; }
+[data-theme="midnight"] .json-validation-errors li { color: #f87171; }
+
+/* Midnight: Warnings & errors */
+[data-theme="midnight"] .wiz-warnings { background: #3b2a0615; border-color: #78350f; color: #fbbf24; }
+[data-theme="midnight"] .wiz-inline-error, [data-theme="midnight"] .cfg-save-error { background: #f8717110; border-color: #f8717135; color: #f87171; }
+[data-theme="midnight"] .wiz-review-warn { color: #fbbf24; }
+
+/* Midnight: Repo accordion */
+[data-theme="midnight"] .repo-accordion { border-color: var(--border); background: var(--bg-secondary); }
+[data-theme="midnight"] .repo-accordion.draft { border-color: var(--primary); }
+[data-theme="midnight"] .repo-accordion .draft-badge { color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+
+/* Midnight: Auto-fill indicator */
+[data-theme="midnight"] .auto-filled-indicator { color: var(--primary); background: color-mix(in srgb, var(--primary) 7%, transparent); }
+[data-theme="midnight"] .effective-value .inherited-tag { color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+[data-theme="midnight"] .effective-value .override-tag { color: #fbbf24; background: #fbbf2415; }
+
+/* Midnight: Scrollbar styling */
+[data-theme="midnight"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+[data-theme="midnight"] ::-webkit-scrollbar-track { background: var(--bg-primary); }
+[data-theme="midnight"] ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+[data-theme="midnight"] ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--primary) 27%, transparent); }
+
+/* Midnight: Confirm modal */
+[data-theme="midnight"] .confirm-modal { border-color: var(--border); }
+[data-theme="midnight"] .confirm-btn.danger { background: var(--primary); border-color: var(--primary); }
+
+/* Midnight: Danger row action buttons */
+[data-theme="midnight"] .row-action-btn.danger { border-color: #f87171; color: #f87171; }
+[data-theme="midnight"] .row-action-btn.danger:hover { background: #DC2626; color: #fff; border-color: #DC2626; }
+
+/* Midnight: Error kind badges */
+[data-theme="midnight"] .error-kind-badge.placeholder { background: #3b2a0622; color: #fbbf24; }
+
+/* Midnight: Skeleton loading */
+[data-theme="midnight"] .skeleton { background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--border) 50%, var(--bg-tertiary) 75%); background-size: 200% 100%; }
+
+/* Calendar phase color overrides for midnight background */
+[data-theme="midnight"] {
+  --phase-freeze: #818CF8;
+  --phase-sit: #38BDF8;
+  --phase-uat: #FCD34D;
+  --phase-uat2-prod: #C4B5FD;
+  --phase-prod: #6EE7B7;
+  --phase-dev: #60A5FA;
+}
+
+/* ============================================================
+   Color Config UI — Color picker + hex input + reset
+   ============================================================ */
+.cfg-color-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 4px; }
+.cfg-color-field { display: flex; flex-direction: column; gap: 4px; }
+.cfg-color-row { display: flex; align-items: center; gap: 6px; }
+.cfg-color-row .cfg-color { width: 36px; height: 32px; padding: 2px; border-radius: var(--radius-sm); cursor: pointer; flex-shrink: 0; }
+.cfg-color-hex { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: var(--font-size-sm); padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text-primary); }
+.cfg-color-hex:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px var(--ring); }
+.cfg-color-hex.invalid { border-color: #dc2626; box-shadow: 0 0 0 2px rgba(220,38,38,.15); }
+.cfg-color-reset { flex-shrink: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-secondary); color: var(--text-tertiary); cursor: pointer; font-size: 14px; line-height: 1; padding: 0; transition: all var(--transition); }
+.cfg-color-reset:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+@media (max-width: 480px) { .cfg-color-grid { grid-template-columns: 1fr; } }
+
+/* ============================================================
+   Design Polish — Cross-Theme Improvements
+   ============================================================ */
+
+/* Smoother transitions on theme switch for key surfaces */
+.header, .toolbar, .metric-card, .repo-table-container, .modal, .config-drawer,
+.summary-section, .filters-bar, .env-milestones, .layer-section,
+.wizard-panel, .rp-wizard-panel, .rc-wizard-panel, .rb-footer,
+.drawer-overlay, .modal-overlay { transition: background-color var(--transition-slow), border-color var(--transition-slow), box-shadow var(--transition-slow), color var(--transition-slow); }
+
+/* Improved table readability */
+.repo-table th { padding: 11px 14px; font-size: 10.5px; letter-spacing: 0.6px; }
+.repo-table td { padding: 13px 14px; }
+
+/* Improved layer section spacing */
+.layer-section { margin: 28px 0; }
+.layer-header h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
+
+/* Improved summary section */
+.summary-section { padding: 24px; margin: 28px 0; }
+.summary-section h2 { font-size: 17px; letter-spacing: -0.2px; }
+
+/* Improved filter bar */
+.filters-bar { padding: 14px 18px; margin: 20px 0; }
+
+/* Better modal sizing on mobile */
+@media (max-width: 640px) {
+  .modal { max-width: calc(100vw - 32px); max-height: 90vh; border-radius: 12px; }
+  .modal-header { padding: 16px 16px 0; }
+  .modal-body { padding: 12px 16px 16px; }
+  .config-drawer { max-width: 100vw; }
+  .wizard-panel { width: calc(100vw - 16px); border-radius: 12px; }
+  .env-milestones { padding: 16px; }
+}

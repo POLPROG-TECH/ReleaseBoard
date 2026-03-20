@@ -1,0 +1,143 @@
+  /* --- Analysis SSE --- */
+  var _sseReconnectAttempts = 0;
+  var _sseMaxReconnects = 3;
+
+  function connectSSE() {
+    if(eventSource) eventSource.close();
+    eventSource = new EventSource('/api/analyze/stream');
+    eventSource.addEventListener('current_state', e=>handleProgress(JSON.parse(e.data)));
+    eventSource.addEventListener('analysis_start', e=>handleProgress(JSON.parse(e.data)));
+    eventSource.addEventListener('analysis_stopping', e=>handleProgress(JSON.parse(e.data)));
+    eventSource.addEventListener('repo_start', e=>handleProgress(JSON.parse(e.data)));
+    eventSource.addEventListener('repo_complete', e=>handleProgress(JSON.parse(e.data)));
+    eventSource.addEventListener('analysis_complete', e=>{
+      handleProgress(JSON.parse(e.data));
+      eventSource.close();
+      eventSource = null;
+      _sseReconnectAttempts = 0;
+      try { sessionStorage.setItem('rb-analysis-done', String(Date.now())); } catch(ex) {}
+      setTimeout(()=>window.location.reload(), 500);
+    });
+    eventSource.onerror = function() {
+      eventSource.close();
+      eventSource = null;
+      if (_sseReconnectAttempts < _sseMaxReconnects) {
+        _sseReconnectAttempts++;
+        var delay = Math.min(1000 * Math.pow(2, _sseReconnectAttempts), 10000);
+        if (typeof showToast === 'function') {
+          showToast(_t('ui.analysis.reconnecting', {attempt: _sseReconnectAttempts, max: _sseMaxReconnects}), 'warning');
+        }
+        setTimeout(function() {
+          connectSSE();
+        }, delay);
+      } else {
+        _sseReconnectAttempts = 0;
+        setAnalysisPhase('failed');
+        if (typeof showToast === 'function') {
+          showToast(_t('ui.analysis.connection_failed'), 'error');
+        }
+      }
+    };
+  }
+
+  async function startAnalysis(){
+    setAnalysisPhase('starting');
+    _sseReconnectAttempts = 0;
+    connectSSE();
+    await fetch('/api/analyze',{method:'POST'});
+  }
+
+  async function stopAnalysis(){
+    setAnalysisPhase('stopping');
+    await fetch('/api/analyze/cancel',{method:'POST'});
+  }
+
+  function handleProgress(p){
+    setAnalysisPhase(p.phase);
+    const bar = document.getElementById('analysisBar');
+    bar.classList.remove('hidden');
+    document.getElementById('analysisPhase').textContent = _t('ui.analysis.phase.' + p.phase) || p.phase;
+
+    var fillEl = document.getElementById('analysisProgressFill');
+    fillEl.style.width = p.progress_pct + '%';
+    fillEl.setAttribute('aria-valuenow', Math.round(p.progress_pct));
+    if(p.phase === 'stopping'){
+      fillEl.style.background = '#d49200';
+    } else {
+      fillEl.style.background = '';
+    }
+    document.getElementById('analysisCount').textContent = p.completed + '/' + p.total;
+    document.getElementById('analysisDetail').textContent = p.current_repo ? ('→ ' + p.current_repo) : (p.elapsed_seconds ? p.elapsed_seconds+'s' : '');
+
+    // Repo chips
+    const list = document.getElementById('analysisRepoList');
+    if(p.repos && p.repos.length > 0){
+      list.innerHTML = p.repos.map(r=>{
+        let cls = 'repo-chip';
+        if(r.status==='done') cls += ' done';
+        else if(r.status==='error') cls += ' error';
+        else if(r.status==='skipped') cls += ' skipped';
+        else if(r.status==='analyzing') cls += ' active';
+        return '<span class="'+cls+'">'+esc(r.name)+'</span>';
+      }).join('');
+    }
+  }
+
+  function setAnalysisPhase(phase){
+    analysisPhase = phase;
+    const dot = document.getElementById('tbDot');
+    const text = document.getElementById('tbStatusText');
+    const stopBtn = document.getElementById('btnStop');
+    const analyzeBtn = document.getElementById('btnAnalyze');
+    const skeletons = document.getElementById('loadingSkeletons');
+    const content = document.getElementById('dashboardContent');
+    const isRunning = ['queued','starting','analyzing','stopping'].includes(phase);
+    document.body.classList.toggle('is-analyzing', isRunning);
+
+    if(stopBtn) stopBtn.classList.toggle('hidden', !isRunning || phase==='stopping');
+    if(analyzeBtn){
+      analyzeBtn.disabled = isRunning;
+      if(phase==='stopping') analyzeBtn.textContent = _t('ui.analysis.phase.stopping');
+      else if(isRunning) analyzeBtn.textContent = '\u25b6 ' + _t('ui.analysis.phase.analyzing');
+      else analyzeBtn.textContent = _t('ui.analyze');
+    }
+
+    // Show skeletons only when no results exist yet and analysis is running
+    const hasContent = content && content.querySelector('.metrics-grid');
+    if(skeletons && content){
+      if(isRunning && !hasContent){
+        skeletons.classList.remove('hidden');
+      } else {
+        skeletons.classList.add('hidden');
+      }
+    }
+
+    // Skeleton stopping state
+    if(skeletons){
+      const skelEls = skeletons.querySelectorAll('.skeleton');
+      skelEls.forEach(el=>{
+        if(phase==='stopping'){ el.classList.add('stopping'); }
+        else { el.classList.remove('stopping'); }
+      });
+    }
+
+    // Phase-specific toolbar status
+    if(phase==='completed'){ dot.className='tb-dot green'; }
+    else if(phase==='cancelled'){ dot.className='tb-dot yellow'; }
+    else if(phase==='stopping'){ dot.className='tb-dot yellow'; }
+    else if(phase==='failed'||phase==='partial_failure'){ dot.className='tb-dot red'; }
+    else if(isRunning){ dot.className='tb-dot yellow'; }
+    else { dot.className='tb-dot gray'; }
+    text.textContent = _t('ui.analysis.phase.' + phase) || phase;
+  }
+
+  /* Auto-start analysis on page load if repos are configured */
+  {% if vm.metrics.total > 0 %}
+  document.addEventListener('DOMContentLoaded', function() {
+    try {
+      const lastRun = sessionStorage.getItem('rb-analysis-done');
+      if (lastRun && (Date.now() - parseInt(lastRun, 10)) < 30000) return;
+    } catch(e) {}
+    setTimeout(function(){ startAnalysis(); }, 800);
+  });
+  {% endif %}

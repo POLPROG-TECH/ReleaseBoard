@@ -1,0 +1,194 @@
+<div class="container">
+
+  <!-- Loading skeletons (overlay — does not shift layout) -->
+  <div id="loadingSkeletons" class="loading-overlay hidden">
+    <section class="metrics-grid">
+      <div class="skeleton-card"><div class="skeleton skeleton-text sm"></div><div class="skeleton skeleton-text lg"></div><div class="skeleton skeleton-text sm"></div></div>
+      <div class="skeleton-card"><div class="skeleton skeleton-text sm"></div><div class="skeleton skeleton-text lg"></div><div class="skeleton skeleton-text sm"></div></div>
+      <div class="skeleton-card"><div class="skeleton skeleton-text sm"></div><div class="skeleton skeleton-text lg"></div><div class="skeleton skeleton-text sm"></div></div>
+      <div class="skeleton-card"><div class="skeleton skeleton-text sm"></div><div class="skeleton skeleton-text lg"></div><div class="skeleton skeleton-text sm"></div></div>
+      <div class="skeleton-card"><div class="skeleton skeleton-text sm"></div><div class="skeleton skeleton-text lg"></div><div class="skeleton skeleton-text sm"></div></div>
+    </section>
+    <div class="loading-section">
+      <div class="skeleton skeleton-block skeleton-block--sm"></div>
+      <div class="skeleton skeleton-block skeleton-block--lg"></div>
+      <div class="skeleton skeleton-block skeleton-block--lg"></div>
+    </div>
+  </div>
+
+{% if vm.interactive and vm.metrics.total > 0 %}
+<!-- ===== Layout Template Bar ===== -->
+<div class="layout-bar" id="layoutBar">
+  <span class="layout-bar-label" data-i18n="ui.layout_label">Layout:</span>
+  <div id="layoutTemplateList"></div>
+</div>
+{% endif %}
+
+  <main id="dashboardContent">
+
+  {% if vm.metrics.total == 0 %}
+  <!-- ===== Empty State — No Repositories ===== -->
+  <section class="empty-repos-state dashboard-section" id="emptyReposState" data-section-id="empty-state" data-section-label="Getting Started">
+    <div class="empty-repos-inner">
+      <div class="empty-repos-icon">📦</div>
+      <h2 class="empty-repos-title" data-i18n="ui.empty_state.title">No repositories configured</h2>
+      <p class="empty-repos-desc" data-i18n="ui.empty_state.desc">Your configuration has no repositories yet. Add repositories to start tracking release readiness across your projects.</p>
+      {% if vm.interactive %}
+      <div class="empty-repos-actions">
+        <button class="empty-repos-btn primary" onclick="RB.openWizard()" data-i18n="ui.empty_state.open_wizard">🧙 Prepare Config</button>
+        <button class="empty-repos-btn secondary" onclick="RB.toggleDrawer()" data-i18n="ui.empty_state.open_config">⚙ Open Configuration</button>
+      </div>
+      <p class="empty-repos-hint" data-i18n="ui.empty_state.hint">Use Prepare Config to auto-discover repositories from GitHub or GitLab, or open Configuration to add them manually.</p>
+      {% endif %}
+    </div>
+  </section>
+  {% else %}
+
+  <!-- ===== Metrics ===== -->
+  <section class="metrics-grid dashboard-section" data-section-id="metrics" data-section-label="Key Metrics">
+    <div class="metric-card"><div class="metric-icon metric-icon-themed"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div><div class="metric-value">{{ vm.metrics.total }}</div><div class="metric-label" data-i18n="ui.metric.total_repos">Total Repositories</div><div class="metric-trend">{{ vm.layers|length }} <span data-i18n="ui.layer.layers">layers</span></div></div>
+    <div class="metric-card ready"><div class="metric-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><div class="metric-value">{{ vm.metrics.ready }}</div><div class="metric-label" data-i18n="ui.metric.ready">Ready</div><div class="metric-trend">{{ vm.metrics.readiness_pct|round(0)|int }}%</div></div>
+    <div class="metric-card missing"><div class="metric-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div><div class="metric-value">{{ vm.metrics.missing }}</div><div class="metric-label" data-i18n="ui.metric.missing_branch">Missing Branch</div></div>
+    <div class="metric-card invalid"><div class="metric-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><div class="metric-value">{{ vm.metrics.invalid_naming }}</div><div class="metric-label" data-i18n="ui.metric.invalid_naming">Invalid Naming</div></div>
+    <div class="metric-card stale"><div class="metric-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg></div><div class="metric-value">{{ vm.metrics.stale }}</div><div class="metric-label" data-i18n="ui.metric.stale">Stale</div></div>
+    {% if vm.metrics.error > 0 %}<div class="metric-card error"><div class="metric-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div class="metric-value">{{ vm.metrics.error }}</div><div class="metric-label" data-i18n="ui.metric.errors">Errors</div></div>{% endif %}
+    {% if vm.metrics.warning > 0 %}<div class="metric-card warning"><div class="metric-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><div class="metric-value">{{ vm.metrics.warning }}</div><div class="metric-label" data-i18n="ui.metric.warnings">Warnings</div></div>{% endif %}
+  </section>
+
+  <!-- ===== Environment Milestones ===== -->
+  <section class="env-milestones dashboard-section hidden" data-section-id="milestones" data-section-label="Milestones" id="envMilestonesSection">
+    <div class="env-milestones-header">
+      <h3 class="section-heading" data-i18n="ui.milestones.title">Environment Milestones</h3>
+      <select class="env-view-select" id="envViewSelect" onchange="if(window._rbMilestonesFilter)window._rbMilestonesFilter(this.value)">
+        <option value="all" data-i18n="ui.milestones.view_all">All milestones</option>
+        <option value="key" selected data-i18n="ui.milestones.view_key">Key milestones</option>
+        <option value="enterprise" data-i18n="ui.milestones.view_enterprise">Enterprise (11)</option>
+        <option value="legacy" data-i18n="ui.milestones.view_legacy">Legacy (5)</option>
+      </select>
+    </div>
+    <div class="env-timeline" id="envTimeline"></div>
+  </section>
+
+  <!-- ===== Release Calendar (auto-rendered by JS) ===== -->
+  {% if vm.interactive %}
+  <section class="dashboard-section hidden" id="rcDashboardView" data-section-id="release-calendar" data-section-label="Release Calendar">
+    <div class="env-milestones-header">
+      <h3 class="section-heading" id="rcDashboardTitle" data-i18n="rc.dashboard.title">📅 Release Calendar</h3>
+      <div class="rc-dashboard-actions" id="rcDashboardActions" style="display:flex;gap:8px;">
+        <button class="row-action-btn edit" onclick="RC.editCalendar()" data-i18n="rc.toolbar.edit_calendar">Edit Calendar</button>
+        <button class="row-action-btn danger" onclick="RC.deleteCalendar()" data-i18n="rc.delete.title">Delete Calendar</button>
+      </div>
+    </div>
+    <div id="rcDashboardTable"></div>
+  </section>
+  {% endif %}
+
+  <!-- ===== Filters ===== -->
+  <div class="filters-bar dashboard-section" data-section-id="filters" data-section-label="Filters">
+    <label for="searchInput" data-i18n="ui.filter.search">Search</label><input type="text" class="filter-input" id="searchInput" data-i18n-placeholder="ui.search_placeholder" placeholder="Search repositories...">
+    <label for="layerFilter" data-i18n="ui.filter.layer">Layer</label>
+    <select class="filter-select" id="layerFilter"><option value="" data-i18n="ui.filter.all">All</option>{% for layer in vm.layers %}<option value="{{ layer.id }}">{{ layer.label }}</option>{% endfor %}</select>
+    <label for="statusFilter" data-i18n="ui.filter.status">Status</label>
+    <select class="filter-select" id="statusFilter"><option value="" data-i18n="ui.filter.all">All</option><option value="ready" data-i18n="status.ready">Ready</option><option value="missing_branch" data-i18n="status.missing_branch">Missing Branch</option><option value="invalid_naming" data-i18n="status.invalid_naming">Invalid Naming</option><option value="stale" data-i18n="status.stale">Stale</option><option value="inactive" data-i18n="status.inactive">Inactive</option><option value="warning" data-i18n="status.warning">Warning</option><option value="error" data-i18n="status.error">Error</option></select>
+    <label for="namingFilter" data-i18n="ui.filter.naming">Naming</label>
+    <select class="filter-select" id="namingFilter"><option value="" data-i18n="ui.filter.any">Any</option><option value="valid" data-i18n="ui.filter.valid">Valid</option><option value="invalid" data-i18n="ui.filter.invalid">Invalid</option></select>
+    <span class="filter-count" id="filterCount">{{ vm.all_repos|length }} repos</span>
+    <button class="filter-reset" id="filterReset" data-i18n="ui.reset">Reset</button>
+    <!-- No results message (inline under search) -->
+    <div class="empty-state no-results-message" id="noResultsMessage">
+      <div class="empty-state-icon">🔍</div>
+      <div class="empty-state-title" data-i18n="ui.no_results">No repositories found matching</div>
+      <div class="empty-state-desc"><span data-i18n="ui.filter.no_results_hint">No repositories match</span> "<span class="no-results-query"></span>"</div>
+      <button class="filter-reset" onclick="searchInput.value='';layerFilter.value='';statusFilter.value='';namingFilter.value='';applyFilters();" data-i18n="ui.clear_filters">Clear filters</button>
+    </div>
+  </div>
+
+  <!-- ===== Attention ===== -->
+  {% if vm.attention_items %}
+  <section class="attention-section dashboard-section" data-section-id="attention" data-section-label="Needs Attention"><h3><span class="status-dot-indicator status-dot-indicator--error"></span> <span data-i18n="ui.needs_attention">Needs Attention</span></h3>
+    <div class="repo-table-container"><table class="repo-table"><thead><tr><th scope="col" data-i18n="ui.table.repository">Repository</th><th scope="col" data-i18n="ui.table.layer">Layer</th><th scope="col" data-i18n="ui.table.status">Status</th><th scope="col" data-i18n="ui.table.expected_branch">Expected Branch</th><th scope="col" data-i18n="ui.table.issue">Issue</th></tr></thead><tbody>
+      {% for repo in vm.attention_items %}
+      <tr class="repo-row" data-repo="{{ repo.name }}" data-layer="{{ repo.layer }}" data-status="{{ repo.status }}">
+        <td><span class="repo-name">{{ repo.name }}</span></td>
+        <td><span class="text-sm text-muted">{{ repo.layer_label }}</span></td>
+        <td><span class="status-badge" style="background:{{ repo.status_badge_bg }};color:{{ repo.status_badge_fg }};"><span class="status-dot" aria-hidden="true" style="background:{{ repo.status_color_bg }};"></span>{{ repo.status_label }}</span></td>
+        <td><code class="branch-name">{{ repo.expected_branch }}</code></td>
+        <td class="text-sm text-muted">{% if repo.warnings %}{{ repo.warnings[0] }}{% elif repo.error_message %}{{ repo.error_message }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody></table></div>
+  </section>
+  {% endif %}
+
+  <!-- ===== Layer Sections ===== -->
+  {% for layer in vm.layers %}
+  <section class="layer-section dashboard-section" data-layer-section="{{ layer.id }}" data-section-id="layer-{{ layer.id }}" data-section-label="{{ layer.label }}">
+    <div class="layer-header">
+      <span class="layer-dot" style="background:{{ layer.color }};"></span>
+      <h2>{{ layer.label }}</h2>
+      <div class="layer-stats">
+        <span class="layer-stat"><strong>{{ layer.total }}</strong> <span data-i18n="ui.layer.repos">repos</span></span>
+        <span class="layer-stat"><strong>{{ layer.ready }}</strong> <span data-i18n="ui.layer.ready">ready</span></span>
+        <span class="layer-stat"><strong>{{ layer.readiness_pct|round(0)|int }}%</strong></span>
+        {% if layer.problem_count > 0 %}<span class="layer-stat text-danger"><strong>{{ layer.problem_count }}</strong> <span data-i18n="ui.layer.problems">problems</span></span>{% endif %}
+      </div>
+    </div>
+    <div class="readiness-bar-container"><div class="readiness-bar"><div class="readiness-bar-fill" style="width:{{ layer.readiness_pct }}%;background:{{ layer.color }};"></div></div></div>
+    <div class="repo-table-container"><table class="repo-table"><thead><tr><th scope="col" data-i18n="ui.table.repository">Repository</th><th scope="col" data-i18n="ui.table.status">Status</th><th scope="col" data-i18n="ui.table.release_branch">Branch</th><th scope="col" data-i18n="ui.table.naming">Naming</th><th scope="col" data-i18n="ui.table.last_activity">Last Activity</th><th scope="col" data-i18n="ui.table.freshness">Freshness</th><th scope="col" data-i18n="ui.table.latest_tag">Latest Tag</th>{% if vm.interactive %}<th scope="col" class="col-actions" data-i18n="ui.table.actions">Actions</th>{% endif %}</tr></thead><tbody>
+      {% for repo in layer.repos %}
+      <tr class="repo-row filterable-row" data-repo="{{ repo.name }}" data-layer="{{ repo.layer }}" data-status="{{ repo.status }}" data-naming="{{ 'valid' if repo.naming_valid else 'invalid' }}" onclick="showDetail('{{ repo.name|e }}')">
+        <td><div class="repo-name">{{ repo.name }}</div><div class="repo-name-sub">{{ repo.url }}</div></td>
+        <td><span class="status-badge" style="background:{{ repo.status_badge_bg }};color:{{ repo.status_badge_fg }};"><span class="status-dot" aria-hidden="true" style="background:{{ repo.status_color_bg }};"></span>{{ repo.status_label }}</span></td>
+        <td>{% if repo.branch_exists %}<code class="branch-name">{{ repo.actual_branch }}</code>{% else %}<span class="text-sm text-muted">—</span>{% endif %}</td>
+        <td>{% if repo.branch_exists %}{% if repo.naming_valid %}<span class="check-icon">✓</span>{% else %}<span class="cross-icon">✗</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td><span class="text-sm">{{ repo.last_activity }}</span></td>
+        <td><span class="text-sm text-muted">{{ repo.freshness }}</span></td>
+        <td>{% if repo.is_gitlab %}{% if repo.latest_tag %}<code class="branch-name tag-name" title="{{ repo.latest_tag_date }}{% if repo.latest_tag_message %} — {{ repo.latest_tag_message }}{% endif %}">{{ repo.latest_tag }}</code>{% else %}<span class="text-sm text-muted" data-i18n="ui.table.latest_tag.no_tag">No tag</span>{% endif %}{% else %}<span class="text-sm text-muted" data-i18n="ui.table.latest_tag.na">N/A</span>{% endif %}</td>
+        {% if vm.interactive %}
+        <td onclick="event.stopPropagation()"><div class="row-actions">
+          <button class="rp-action-btn" onclick="RP.openWizard('{{ repo.name|e }}')" data-i18n-title="rp.action.prepare_release_tooltip" title="Generate release notes for this repository"><span data-i18n="rp.action.prepare">Release Notes</span></button>
+          <button class="row-action-btn edit" onclick="RB.editRepoByName('{{ repo.name|e }}')" data-i18n="ui.btn.edit">Edit</button>
+          <button class="row-action-btn danger" onclick="RB.deleteRepoByName('{{ repo.name|e }}')" data-i18n="ui.btn.delete">Delete</button>
+        </div></td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody></table></div>
+  </section>
+  {% endfor %}
+
+  <!-- ===== Summary ===== -->
+  <section class="summary-section dashboard-section" data-section-id="summary" data-section-label="Summary">
+    <h2 data-i18n="ui.summary.title">Release Readiness Summary</h2>
+    <div class="summary-grid">
+      <div class="summary-box"><h4 data-i18n="ui.overall_status">Overall Status</h4><ul>
+        <li><strong>{{ vm.metrics.total }}</strong> <span data-i18n="ui.summary.repos_tracked">repositories tracked</span></li>
+        <li><strong>{{ vm.metrics.ready }}</strong> <span data-i18n="ui.summary.ready">ready</span> ({{ vm.metrics.readiness_pct|round(1) }}%)</li>
+        <li><strong>{{ vm.metrics.missing }}</strong> <span data-i18n="ui.summary.missing_branches">missing release branches</span></li>
+        <li><strong>{{ vm.metrics.invalid_naming }}</strong> <span data-i18n="ui.summary.invalid_naming">invalid naming</span></li>
+        <li><strong>{{ vm.metrics.stale }}</strong> <span data-i18n="ui.summary.stale_branches">stale branches</span></li>
+        {% if vm.metrics.error > 0 %}<li><strong>{{ vm.metrics.error }}</strong> <span data-i18n="ui.summary.errors">errors</span></li>{% endif %}
+      </ul></div>
+      <div class="summary-box"><h4 data-i18n="ui.layer_breakdown">Layer Breakdown</h4><ul>
+        {% for layer in vm.layers %}
+        <li><strong>{{ layer.label }}</strong>: {{ layer.ready }}/{{ layer.total }} ({{ layer.readiness_pct|round(0)|int }}%){% if layer.problem_count > 0 %} — <span class="text-danger">{{ layer.problem_count }} <span data-i18n="ui.summary.issues">issues</span></span>{% endif %}</li>
+        {% endfor %}
+      </ul></div>
+      <div class="summary-box"><h4 data-i18n="ui.suggested_actions">Suggested Actions</h4><ul>
+        {% if vm.metrics.missing > 0 %}<li><span class="summary-dot summary-dot--error"></span> <span data-i18n="ui.action.create">Create</span> <strong>{{ vm.metrics.missing }}</strong> <span data-i18n="ui.action.missing_branch_plural">missing branches</span></li>{% endif %}
+        {% if vm.metrics.invalid_naming > 0 %}<li><span class="summary-dot summary-dot--warning"></span> <span data-i18n="ui.action.fix">Fix</span> <strong>{{ vm.metrics.invalid_naming }}</strong> <span data-i18n="ui.action.naming_issue_plural">naming issues</span></li>{% endif %}
+        {% if vm.metrics.stale > 0 %}<li><span class="summary-dot summary-dot--stale"></span> <span data-i18n="ui.action.review">Review</span> <strong>{{ vm.metrics.stale }}</strong> <span data-i18n="ui.action.stale_branch_plural">stale branches</span></li>{% endif %}
+        {% if vm.metrics.error > 0 %}<li><span class="summary-dot summary-dot--danger"></span> <span data-i18n="ui.action.investigate">Investigate</span> <strong>{{ vm.metrics.error }}</strong> <span data-i18n="ui.action.error_count_plural">errors</span></li>{% endif %}
+        {% if vm.metrics.readiness_pct >= 100 %}<li><span data-i18n="ui.action.all_ready">✓ All repositories are release-ready!</span></li>{% endif %}
+      </ul></div>
+      <div class="summary-box"><h4 data-i18n="ui.report_metadata">Report Metadata</h4><ul>
+        <li><span data-i18n="ui.meta.generated">Generated</span>: <strong>{{ vm.generated_at }}</strong></li>
+        <li><span data-i18n="ui.meta.release">Release</span>: <strong>{{ vm.release_name }}</strong></li>
+        {% if vm.company %}<li><span data-i18n="ui.meta.company">Company</span>: <strong>{{ vm.company }}</strong></li>{% endif %}
+        <li><span data-i18n="ui.meta.tool">Tool</span>: <strong>ReleaseBoard v1.0</strong></li>
+      </ul></div>
+    </div>
+  </section>
+  {% endif %}{# vm.metrics.total == 0 / else #}
+  </main>
+</div>

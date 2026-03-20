@@ -1,0 +1,280 @@
+<!-- ===== Release Preparation Wizard (ReleasePilot Integration) ===== -->
+{% if vm.interactive %}
+<div class="rp-wizard-overlay" id="rpWizardOverlay" onclick="if(event.target===this&&typeof RP!=='undefined')RP.closeWizard()">
+  <div class="rp-wizard-panel">
+    <div class="rp-wizard-header">
+      <h2>📝 <span data-i18n="rp.wizard.title">Generate Release Notes</span></h2>
+      <button class="rp-wizard-close" onclick="RP.closeWizard()" aria-label="Close" data-i18n-aria-label="ui.aria.close_modal">✕</button>
+    </div>
+    <div class="rp-wizard-steps" id="rpWizardSteps" role="tablist">
+      <div class="rp-wizard-step-tab active" data-step="0" role="tab" aria-selected="true">
+        <span class="rp-step-num">1</span>
+        <span data-i18n="rp.wizard.step.context">Context</span>
+      </div>
+      <div class="rp-wizard-step-tab" data-step="1" role="tab" aria-selected="false">
+        <span class="rp-step-num">2</span>
+        <span data-i18n="rp.wizard.step.configure">Configure</span>
+      </div>
+      <div class="rp-wizard-step-tab" data-step="2" role="tab" aria-selected="false">
+        <span class="rp-step-num">3</span>
+        <span data-i18n="rp.wizard.step.preview">Preview</span>
+      </div>
+      <div class="rp-wizard-step-tab" data-step="3" role="tab" aria-selected="false">
+        <span class="rp-step-num">4</span>
+        <span data-i18n="rp.wizard.step.confirm">Confirm</span>
+      </div>
+    </div>
+
+    <div class="rp-wizard-body" id="rpWizardBody">
+      <!-- Step 1: Context -->
+      <div class="rp-wizard-step-content active" id="rpStep0">
+        <p class="rp-step-desc" data-i18n="rp.wizard.context_desc">Review the repository context. This data is pre-filled from ReleaseBoard.</p>
+        <div class="rp-context-grid" id="rpContextGrid">
+          <div class="rp-context-row">
+            <span class="rp-context-label" data-i18n="rp.wizard.repo_name">Repository</span>
+            <span class="rp-context-value" id="rpCtxName">—</span>
+          </div>
+          <div class="rp-context-row">
+            <span class="rp-context-label" data-i18n="rp.wizard.repo_url">Repository URL</span>
+            <span class="rp-context-value rp-context-mono" id="rpCtxUrl">—</span>
+          </div>
+          <div class="rp-context-row">
+            <span class="rp-context-label" data-i18n="rp.wizard.layer">Layer</span>
+            <span class="rp-context-value" id="rpCtxLayer">—</span>
+          </div>
+          <div class="rp-context-row">
+            <span class="rp-context-label" data-i18n="rp.wizard.release_branch">Release Branch</span>
+            <span class="rp-context-value rp-context-mono" id="rpCtxReleaseBranch">—</span>
+          </div>
+          <div class="rp-context-row">
+            <span class="rp-context-label" data-i18n="rp.wizard.default_branch">Default Branch</span>
+            <span class="rp-context-value rp-context-mono" id="rpCtxDefaultBranch">—</span>
+          </div>
+          <div class="rp-context-row">
+            <span class="rp-context-label" data-i18n="rp.wizard.status">Readiness Status</span>
+            <span class="rp-context-value" id="rpCtxStatus">—</span>
+          </div>
+        </div>
+        <div class="rp-inline-error hidden" id="rpStep0Error"></div>
+      </div>
+
+      <!-- Step 2: Configure -->
+      <div class="rp-wizard-step-content" id="rpStep1">
+        <p class="rp-step-desc" data-i18n="rp.wizard.configure_desc">Configure release parameters. Fields are pre-filled where possible.</p>
+        <div class="rp-form-grid">
+          <div class="rp-form-row">
+            <label for="rpReleaseTitle" data-i18n="rp.wizard.release_title">Release Title</label>
+            <input type="text" id="rpReleaseTitle" class="rp-input" data-i18n-placeholder="rp.wizard.release_title_placeholder" placeholder="e.g. March 2026 Release" maxlength="200" aria-describedby="rpReleaseTitleError">
+            <div class="rp-field-error" id="rpReleaseTitleError"></div>
+          </div>
+          <div class="rp-form-row">
+            <label for="rpReleaseVersion" data-i18n="rp.wizard.release_version">Release Version</label>
+            <input type="text" id="rpReleaseVersion" class="rp-input" data-i18n-placeholder="rp.wizard.release_version_placeholder" placeholder="e.g. 2026.03" maxlength="50" aria-describedby="rpReleaseVersionError">
+            <div class="rp-field-error" id="rpReleaseVersionError"></div>
+          </div>
+          <div class="rp-form-row-pair">
+            <div class="rp-form-row">
+              <label for="rpBranch" data-i18n="rp.option.branch">Branch</label>
+              <input type="text" id="rpBranch" class="rp-input rp-input-mono" data-i18n-placeholder="rp.option.branch_placeholder" placeholder="e.g. main or release/2026.03">
+            </div>
+            <div class="rp-form-row">
+              <label for="rpSinceDate" data-i18n="rp.option.since_date">Since date</label>
+              <select id="rpSinceDate" class="rp-select">
+                <option value="" data-i18n="rp.period.none">— Not set (use refs) —</option>
+                <option value="7" data-i18n="rp.period.7d">Last 7 days</option>
+                <option value="14" data-i18n="rp.period.14d">Last 14 days</option>
+                <option value="30" data-i18n="rp.period.30d" selected>Last 30 days</option>
+                <option value="60" data-i18n="rp.period.60d">Last 60 days</option>
+                <option value="90" data-i18n="rp.period.90d">Last 90 days</option>
+                <option value="180" data-i18n="rp.period.180d">Last 6 months</option>
+                <option value="365" data-i18n="rp.period.365d">Last 12 months</option>
+              </select>
+              <div class="rp-field-hint" data-i18n="rp.option.since_date.hint"></div>
+            </div>
+          </div>
+          <div class="rp-form-row-pair">
+            <div class="rp-form-row">
+              <label for="rpAudience" data-i18n="rp.wizard.audience">Audience</label>
+              <select id="rpAudience" class="rp-select">
+                <option value="changelog" data-i18n="rp.audience.changelog">Changelog</option>
+                <option value="technical" data-i18n="rp.audience.technical">Technical</option>
+                <option value="user" data-i18n="rp.audience.user">User-Friendly</option>
+                <option value="summary" data-i18n="rp.audience.summary">Summary</option>
+                <option value="customer" data-i18n="rp.audience.customer">Customer</option>
+                <option value="executive" data-i18n="rp.audience.executive">Executive</option>
+                <option value="narrative" data-i18n="rp.audience.narrative">Narrative</option>
+                <option value="customer-narrative" data-i18n="rp.audience.customer_narrative">Customer Narrative</option>
+              </select>
+              <div class="rp-field-hint" id="rpAudienceHint"></div>
+            </div>
+            <div class="rp-form-row">
+              <label for="rpOutputFormat" data-i18n="rp.wizard.output_format">Output Format</label>
+              <select id="rpOutputFormat" class="rp-select">
+                <option value="markdown" data-i18n="rp.format.markdown">Markdown</option>
+                <option value="plaintext" data-i18n="rp.format.plaintext">Plain Text</option>
+                <option value="json" data-i18n="rp.format.json">JSON</option>
+                <option value="pdf" data-i18n="rp.format.pdf">PDF</option>
+                <option value="docx" data-i18n="rp.format.docx">Word (DOCX)</option>
+              </select>
+              <div class="rp-field-hint" id="rpFormatHint"></div>
+            </div>
+          </div>
+          <div class="rp-form-row-pair">
+            <div class="rp-form-row">
+              <label for="rpLanguage" data-i18n="rp.option.language">Notes language</label>
+              <select id="rpLanguage" class="rp-select">
+                <option value="en">English</option>
+                <option value="pl">Polski</option>
+                <option value="de">Deutsch</option>
+                <option value="fr">Français</option>
+                <option value="es">Español</option>
+                <option value="it">Italiano</option>
+                <option value="pt">Português</option>
+                <option value="nl">Nederlands</option>
+                <option value="uk">Українська</option>
+                <option value="cs">Čeština</option>
+              </select>
+            </div>
+            <div class="rp-form-row">
+              <label for="rpAccentColor" data-i18n="rp.option.accent_color">Accent color (PDF/DOCX)</label>
+              <input type="color" id="rpAccentColor" class="rp-input rp-color-input" value="#FB6400">
+            </div>
+          </div>
+          <div id="rpRenderOptions">
+          <div class="rp-form-row-pair">
+            <div class="rp-form-row rp-checkbox-row">
+              <label><input type="checkbox" id="rpIncludeAuthors" checked> <span data-i18n="rp.wizard.include_authors">Include commit authors</span></label>
+            </div>
+            <div class="rp-form-row rp-checkbox-row">
+              <label><input type="checkbox" id="rpIncludeHashes"> <span data-i18n="rp.wizard.include_hashes">Include commit hashes</span></label>
+            </div>
+          </div>
+          <div class="rp-form-row-pair">
+            <div class="rp-form-row rp-checkbox-row">
+              <label><input type="checkbox" id="rpShowScope" checked> <span data-i18n="rp.option.show_scope">Show scope/module</span></label>
+            </div>
+            <div class="rp-form-row rp-checkbox-row">
+              <label><input type="checkbox" id="rpShowPrLinks" checked> <span data-i18n="rp.option.show_pr_links">Show PR links</span></label>
+            </div>
+          </div>
+          <div class="rp-form-row rp-checkbox-row">
+            <label><input type="checkbox" id="rpGroupByScope"> <span data-i18n="rp.option.group_by_scope">Group changes by scope</span></label>
+          </div>
+          <div class="rp-field-hint hidden" id="rpRenderOptionsHint" data-i18n="rp.hint.render_options_ignored">Render options are not applicable for this audience type.</div>
+          </div>
+          <div class="rp-form-row">
+            <label for="rpAdditionalNotes" data-i18n="rp.wizard.additional_notes">Additional Notes (optional)</label>
+            <textarea id="rpAdditionalNotes" class="rp-textarea" rows="3" data-i18n-placeholder="rp.wizard.additional_notes_placeholder" placeholder="Any extra notes to include in the release..." maxlength="5000"></textarea>
+          </div>
+        </div>
+        <div class="rp-inline-error hidden" id="rpStep1Error"></div>
+      </div>
+
+      <!-- Step 3: Preview -->
+      <div class="rp-wizard-step-content" id="rpStep2">
+        <!-- Loading state -->
+        <div class="rp-generating hidden" id="rpGenerating">
+          <div class="rp-spinner"></div>
+          <h3 data-i18n="rp.wizard.generating">Generating release notes…</h3>
+          <p data-i18n="rp.wizard.generating_desc">ReleasePilot is preparing the release notes. This may take a moment.</p>
+        </div>
+        <!-- Error state -->
+        <div class="rp-gen-error hidden" id="rpGenError">
+          <div class="rp-gen-error-icon">⚠</div>
+          <h3 data-i18n="rp.wizard.error_title">Release Preparation Failed</h3>
+          <p id="rpGenErrorMsg" data-i18n="rp.wizard.error_desc">An error occurred while generating release notes.</p>
+          <button class="rp-btn" onclick="RP.retryGenerate()" data-i18n="rp.wizard.error_retry">Retry</button>
+        </div>
+        <!-- Preview state -->
+        <div class="rp-preview hidden" id="rpPreview">
+          <p class="rp-step-desc" id="rpPreviewDesc" data-i18n="rp.wizard.preview_desc">Review the generated release notes. You can edit them before confirming.</p>
+          <div class="rp-preview-stats" id="rpPreviewStats">
+            <div class="rp-stat">
+              <span class="rp-stat-value" id="rpStatChanges">0</span>
+              <span class="rp-stat-label" data-i18n="rp.wizard.total_changes">Total Changes</span>
+            </div>
+            <div class="rp-stat">
+              <span class="rp-stat-value" id="rpStatHighlights">0</span>
+              <span class="rp-stat-label" data-i18n="rp.wizard.highlights_count">Highlights</span>
+            </div>
+            <div class="rp-stat">
+              <span class="rp-stat-value" id="rpStatBreaking">0</span>
+              <span class="rp-stat-label" data-i18n="rp.wizard.breaking_count">Breaking Changes</span>
+            </div>
+          </div>
+          <div class="rp-preview-warnings hidden" id="rpPreviewWarnings"></div>
+          <!-- Text content preview (markdown / plaintext / json) -->
+          <div class="rp-preview-content-wrap" id="rpPreviewTextWrap">
+            <div class="rp-preview-toolbar">
+              <span data-i18n="rp.wizard.preview_content">Release Notes Content</span>
+              <button class="rp-btn-sm" onclick="RP.toggleEdit()" id="rpEditToggle" data-i18n="rp.wizard.edit_content">Edit content</button>
+            </div>
+            <div class="rp-preview-content" id="rpPreviewContent" contenteditable="false"></div>
+          </div>
+          <!-- Binary content preview (PDF / DOCX) -->
+          <div class="rp-preview-binary-wrap hidden" id="rpPreviewBinaryWrap">
+            <div class="rp-preview-toolbar">
+              <span id="rpBinaryFormatLabel">PDF</span>
+            </div>
+            <iframe id="rpPdfPreview" class="rp-pdf-preview hidden"></iframe>
+            <div class="rp-binary-placeholder hidden" id="rpDocxPlaceholder">
+              <div class="rp-binary-icon">📄</div>
+              <p id="rpBinaryMsg" data-i18n="rp.wizard.docx_no_preview">DOCX preview is not available in the browser. Use the download button.</p>
+              <button class="rp-btn primary" onclick="RP.downloadNotes()" data-i18n="rp.wizard.btn_download">⤓ Download</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4: Confirm -->
+      <div class="rp-wizard-step-content" id="rpStep3">
+        <div class="rp-confirm-box">
+          <h3 data-i18n="rp.wizard.confirm_title">Confirm Release Preparation</h3>
+          <p data-i18n="rp.wizard.confirm_desc">Review the final release details below. Once confirmed, the release notes will be finalized.</p>
+          <div class="rp-confirm-grid" id="rpConfirmGrid">
+            <div class="rp-confirm-row">
+              <span data-i18n="rp.wizard.confirm_repo">Repository</span>
+              <strong id="rpConfirmRepo">—</strong>
+            </div>
+            <div class="rp-confirm-row">
+              <span data-i18n="rp.wizard.confirm_version">Version</span>
+              <strong id="rpConfirmVersion">—</strong>
+            </div>
+            <div class="rp-confirm-row">
+              <span data-i18n="rp.wizard.confirm_audience">Audience</span>
+              <strong id="rpConfirmAudience">—</strong>
+            </div>
+            <div class="rp-confirm-row">
+              <span data-i18n="rp.wizard.confirm_format">Format</span>
+              <strong id="rpConfirmFormat">—</strong>
+            </div>
+            <div class="rp-confirm-row">
+              <span data-i18n="rp.wizard.confirm_changes">Changes</span>
+              <strong id="rpConfirmChanges">—</strong>
+            </div>
+          </div>
+          <div class="rp-confirm-warnings hidden" id="rpConfirmWarnings"></div>
+        </div>
+        <!-- Success state (shown after confirmation) -->
+        <div class="rp-success hidden" id="rpSuccess">
+          <div class="rp-success-icon">✓</div>
+          <h3 data-i18n="rp.wizard.success_title">Release Notes Ready</h3>
+          <p id="rpSuccessMsg" data-i18n="rp.wizard.success_desc">Release notes have been generated successfully.</p>
+          <div class="rp-success-actions">
+            <button class="rp-btn primary" onclick="RP.downloadNotes()" data-i18n="rp.wizard.btn_download">⤓ Download</button>
+            <button class="rp-btn" id="rpBtnCopy" onclick="RP.copyNotes()" data-i18n="rp.wizard.btn_copy">Copy to Clipboard</button>
+            <button class="rp-btn" onclick="RP.closeWizard()" data-i18n="rp.wizard.btn_close">Close</button>
+          </div>
+          <div class="rp-toast hidden" id="rpToast"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rp-wizard-footer" id="rpWizardFooter">
+      <button class="rp-btn hidden" id="rpBtnPrev" onclick="RP.prevStep()" data-i18n="rp.wizard.btn_prev">Back</button>
+      <span class="spacer"></span>
+      <button class="rp-btn primary" id="rpBtnNext" onclick="RP.nextStep()" data-i18n="rp.wizard.btn_next">Next →</button>
+    </div>
+  </div>
+</div>
+{% endif %}

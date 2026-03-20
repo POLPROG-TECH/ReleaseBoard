@@ -1,0 +1,792 @@
+/* ============================================================
+   Release Calendar Wizard — JavaScript
+   Supports: wizard, events, monthly schedule, preview, import
+   ============================================================ */
+(function() {
+  'use strict';
+
+  // Enterprise default milestones (canonical order)
+  var PHASES = [
+    'feature_freeze','promote_sit','sit_start','sit_end',
+    'fov_readiness','promote_uat','uat_end',
+    'hard_code_freeze','uat2_install','uat2_end','prod_install'
+  ];
+  // Legacy phases kept for backward compatibility
+  var LEGACY_PHASES = ['dev','sit','uat','preprod','prod'];
+  var ALL_PHASES = PHASES.concat(LEGACY_PHASES);
+
+  var PHASE_LABELS = {
+    feature_freeze: T('rc.milestone.feature_freeze', 'Feature Freeze'), promote_sit: T('rc.milestone.promote_sit', 'Promote SIT'),
+    sit_start: T('rc.milestone.sit_start', 'SIT Start'), sit_end: T('rc.milestone.sit_end', 'SIT End'),
+    fov_readiness: T('rc.milestone.fov_readiness', 'FOV Readiness'), promote_uat: T('rc.milestone.promote_uat', 'Promote UAT'),
+    uat_end: T('rc.milestone.uat_end', 'UAT End'), hard_code_freeze: T('rc.milestone.hard_code_freeze', 'Hard Code Freeze'),
+    uat2_install: T('rc.milestone.uat2_install', 'UAT2 Install'), uat2_end: T('rc.milestone.uat2_end', 'UAT2 End'), prod_install: T('rc.milestone.prod_install', 'PROD Install'),
+    dev: T('rc.milestone.dev', 'DEV'), sit: T('rc.milestone.sit', 'SIT'), uat: T('rc.milestone.uat', 'UAT'), preprod: T('rc.milestone.preprod', 'PREPROD'), prod: T('rc.milestone.prod', 'PROD')
+  };
+  var PHASE_COLORS = {
+    feature_freeze: '#6366F1', hard_code_freeze: '#4F46E5',
+    promote_sit: '#14B8A6', sit_start: '#0EA5E9', sit_end: '#0284C7',
+    fov_readiness: '#F59E0B', promote_uat: '#D97706', uat_end: '#EA580C',
+    uat2_install: '#8B5CF6', uat2_end: '#7C3AED', prod_install: '#10B981',
+    dev: '#3B82F6', sit: '#0EA5E9', uat: '#F59E0B', preprod: '#8B5CF6', prod: '#10B981'
+  };
+  var PHASE_GROUPS = [
+    { id: 'freeze', label: 'Freeze', phases: ['feature_freeze','hard_code_freeze'], color: '#6366F1' },
+    { id: 'sit', label: 'SIT', phases: ['promote_sit','sit_start','sit_end'], color: '#0EA5E9' },
+    { id: 'uat', label: 'UAT / FOV', phases: ['fov_readiness','promote_uat','uat_end'], color: '#F59E0B' },
+    { id: 'uat2_prod', label: 'UAT2 / PROD', phases: ['uat2_install','uat2_end','prod_install'], color: '#8B5CF6' }
+  ];
+  var TOTAL_STEPS = 5;
+  var currentStep = 0;
+  var selectedMonths = [];
+  var isEditMode = false;
+  var _focusTrap = null;
+  var _monthRangeStart = null;
+  var eventRows = []; // [{date, phase, label, notes}]
+  var _pendingImportData = null;
+
+  function $(id) { return document.getElementById(id); }
+  function T(key, fb) { return (typeof _t === 'function') ? _t(key) : fb || key; }
+  function show(el) { if (el) { el.classList.remove('hidden'); el.style.display = ''; } }
+  function hide(el) { if (el) el.style.display = 'none'; }
+
+  var MONTH_KEYS = [
+    'rc.month.jan','rc.month.feb','rc.month.mar','rc.month.apr',
+    'rc.month.may','rc.month.jun','rc.month.jul','rc.month.aug',
+    'rc.month.sep','rc.month.oct','rc.month.nov','rc.month.dec'
+  ];
+  var MONTH_SHORT = [
+    'rc.month_short.jan','rc.month_short.feb','rc.month_short.mar','rc.month_short.apr',
+    'rc.month_short.may','rc.month_short.jun','rc.month_short.jul','rc.month_short.aug',
+    'rc.month_short.sep','rc.month_short.oct','rc.month_short.nov','rc.month_short.dec'
+  ];
+
+  function monthName(m) { return T(MONTH_KEYS[m - 1], ['January','February','March','April','May','June','July','August','September','October','November','December'][m - 1]); }
+  function monthShort(m) { return T(MONTH_SHORT[m - 1], ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1]); }
+  function quarterOf(m) { return Math.ceil(m / 3); }
+
+  function dayOfWeek(dateStr) {
+    if (!dateStr) return '';
+    try {
+      var d = new Date(dateStr + 'T00:00:00');
+      var days = [T('rc.day.sun','Sun'),T('rc.day.mon','Mon'),T('rc.day.tue','Tue'),T('rc.day.wed','Wed'),T('rc.day.thu','Thu'),T('rc.day.fri','Fri'),T('rc.day.sat','Sat')];
+      return days[d.getDay()];
+    } catch(e) { return ''; }
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '—';
+    var parts = dateStr.split('-');
+    return parts[2] + '.' + parts[1];
+  }
+
+  function formatDateFull(dateStr) {
+    if (!dateStr) return '—';
+    var parts = dateStr.split('-');
+    return parts[2] + '.' + parts[1] + '.' + parts[0];
+  }
+
+  // ======================== OPEN / CLOSE ========================
+
+  function openWizard(editData) {
+    currentStep = 0;
+    selectedMonths = [];
+    eventRows = [];
+    isEditMode = !!editData;
+    _monthRangeStart = null;
+
+    _initYearSelector();
+    _initMonthGrid();
+    _updateStepUI();
+
+    if (editData && editData.release_calendar) {
+      _loadExistingCalendar(editData.release_calendar);
+    } else {
+      $('rcCalendarName').value = '';
+      $('rcCalendarNotes').value = '';
+      $('rcShowWeekdays').checked = true;
+      $('rcShowNotes').checked = true;
+      $('rcShowQuarters').checked = true;
+    }
+
+    var overlay = $('rcWizardOverlay');
+    if (overlay) {
+      overlay.classList.add('active');
+      document.body.style.overflow = 'hidden';
+      if (typeof trapFocus === 'function') {
+        setTimeout(function() { _focusTrap = trapFocus(overlay); }, 100);
+      }
+    }
+  }
+
+  function closeWizard() {
+    var overlay = $('rcWizardOverlay');
+    if (overlay) {
+      overlay.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+    if (_focusTrap) { _focusTrap(); _focusTrap = null; }
+  }
+
+  function _loadExistingCalendar(cal) {
+    $('rcCalendarName').value = cal.name || '';
+    $('rcCalendarNotes').value = cal.notes || '';
+    if (cal.year) $('rcYear').value = String(cal.year);
+    if (cal.display) {
+      $('rcShowWeekdays').checked = cal.display.show_weekdays !== false;
+      $('rcShowNotes').checked = cal.display.show_notes !== false;
+      $('rcShowQuarters').checked = cal.display.show_quarter_headers !== false;
+    }
+    // Load events
+    eventRows = [];
+    if (cal.events && cal.events.length) {
+      cal.events.forEach(function(evt) {
+        eventRows.push({
+          date: evt.date || '',
+          phase: evt.phase || 'dev',
+          label: evt.label || '',
+          notes: evt.notes || ''
+        });
+      });
+    }
+    // Load months
+    if (cal.months && cal.months.length) {
+      selectedMonths = cal.months.map(function(m) { return m.month; }).sort(function(a,b){return a-b;});
+      _updateMonthGrid();
+      _buildScheduleTable();
+      cal.months.forEach(function(m) {
+        if (m.phases) {
+          PHASES.forEach(function(p) {
+            var input = $('rcDate_' + m.month + '_' + p);
+            if (input && m.phases[p]) input.value = m.phases[p];
+          });
+        }
+        var notesInput = $('rcNotes_' + m.month);
+        if (notesInput && m.notes) notesInput.value = m.notes;
+      });
+    }
+  }
+
+  // ======================== YEAR + MONTH SETUP ========================
+
+  function _initYearSelector() {
+    var sel = $('rcYear');
+    sel.innerHTML = '';
+    var now = new Date().getFullYear();
+    for (var y = now - 1; y <= now + 3; y++) {
+      var opt = document.createElement('option');
+      opt.value = y; opt.textContent = y;
+      if (y === now) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  }
+
+  function _initMonthGrid() {
+    var grid = $('rcMonthGrid');
+    grid.innerHTML = '';
+    for (var m = 1; m <= 12; m++) {
+      var chip = document.createElement('div');
+      chip.className = 'rc-month-chip';
+      chip.dataset.month = m;
+      chip.textContent = monthShort(m);
+      chip.addEventListener('click', _onMonthClick);
+      grid.appendChild(chip);
+    }
+  }
+
+  function _onMonthClick(e) {
+    var m = parseInt(e.target.dataset.month);
+    var idx = selectedMonths.indexOf(m);
+    if (idx >= 0) {
+      selectedMonths.splice(idx, 1);
+    } else {
+      selectedMonths.push(m);
+      selectedMonths.sort(function(a,b){return a-b;});
+    }
+    _updateMonthGrid();
+    _validateSetupLive();
+  }
+
+  function _updateMonthGrid() {
+    var chips = $('rcMonthGrid').querySelectorAll('.rc-month-chip');
+    chips.forEach(function(c) {
+      var m = parseInt(c.dataset.month);
+      c.classList.toggle('selected', selectedMonths.indexOf(m) >= 0);
+    });
+  }
+
+  // ======================== EVENTS MANAGEMENT ========================
+
+  function _renderEvents() {
+    var container = $('rcEventsContainer');
+    if (!container) return;
+    if (eventRows.length === 0) {
+      container.innerHTML = '<div class="rc-events-empty" data-i18n="rc.event.no_events">' + T('rc.event.no_events', 'No events added yet. Click "Add Event" to create one.') + '</div>';
+      return;
+    }
+    var html = '';
+    eventRows.forEach(function(evt, i) {
+      html += '<div class="rc-event-row" data-idx="' + i + '">';
+      html += '<input type="date" value="' + (evt.date || '') + '" onchange="RC._onEventChange(' + i + ',\'date\',this.value)">';
+      html += '<select onchange="RC._onEventChange(' + i + ',\'phase\',this.value)">';
+      ALL_PHASES.forEach(function(p) {
+        html += '<option value="' + p + '"' + (evt.phase === p ? ' selected' : '') + '>' + PHASE_LABELS[p] + '</option>';
+      });
+      html += '</select>';
+      html += '<input type="text" placeholder="' + T('rc.event.label', 'Label') + '..." value="' + _escAttr(evt.label || '') + '" onchange="RC._onEventChange(' + i + ',\'label\',this.value)" maxlength="200">';
+      html += '<button class="rc-event-remove" onclick="RC.removeEvent(' + i + ')" data-i18n="rc.event.remove">✕</button>';
+      html += '</div>';
+    });
+    container.innerHTML = html;
+  }
+
+  function addEvent() {
+    var today = new Date().toISOString().slice(0, 10);
+    eventRows.push({ date: today, phase: 'feature_freeze', label: '', notes: '' });
+    _renderEvents();
+  }
+
+  function removeEvent(idx) {
+    eventRows.splice(idx, 1);
+    _renderEvents();
+  }
+
+  function _onEventChange(idx, field, value) {
+    if (eventRows[idx]) {
+      eventRows[idx][field] = value;
+    }
+  }
+
+  // ======================== STEP NAVIGATION ========================
+
+  function nextStep() {
+    if (!_validateStep(currentStep)) return;
+    if (currentStep === 0) { _renderEvents(); _buildScheduleTable(); }
+    if (currentStep === 1) { _buildScheduleTable(); }
+    if (currentStep === 2) { _buildPreview(); }
+    if (currentStep === 3) { if (window.RC._buildExportView) window.RC._buildExportView(); }
+    if (currentStep < TOTAL_STEPS - 1) {
+      currentStep++;
+      _updateStepUI();
+    }
+  }
+
+  function prevStep() {
+    if (currentStep > 0) {
+      currentStep--;
+      _updateStepUI();
+    }
+  }
+
+  function _validateSetupLive() {
+    var name = ($('rcCalendarName') || {}).value || '';
+    var next = $('rcBtnNext');
+    var isNameValid = !!name.trim();
+    var isMonthsValid = selectedMonths.length > 0;
+
+    if (!isNameValid) {
+      _showFieldErr('rcCalendarNameError', T('rc.validation.name_required', 'Calendar name is required'));
+    } else {
+      hide($('rcCalendarNameError'));
+    }
+
+    var monthErrEl = $('rcMonthGridError');
+    if (!isMonthsValid) {
+      if (monthErrEl) { monthErrEl.textContent = T('rc.validation.months_required', 'Select at least one month'); show(monthErrEl); }
+    } else {
+      if (monthErrEl) hide(monthErrEl);
+    }
+
+    if (next) next.disabled = !isNameValid || !isMonthsValid;
+  }
+
+  function _validateScheduleLive() {
+    var next = $('rcBtnNext');
+    if (!next) return;
+    var invalidInputs = document.querySelectorAll('#rcStep2 input.invalid');
+    next.disabled = invalidInputs.length > 0;
+  }
+
+  function _updateStepUI() {
+    var tabs = document.querySelectorAll('#rcWizardOverlay .rc-wizard-step-tab');
+    tabs.forEach(function(tab) {
+      var s = parseInt(tab.getAttribute('data-step'));
+      tab.classList.toggle('active', s === currentStep);
+      tab.classList.toggle('completed', s < currentStep);
+      tab.setAttribute('aria-selected', s === currentStep ? 'true' : 'false');
+      var num = tab.querySelector('.rc-step-num');
+      if (num) num.textContent = s < currentStep ? '' : String(s + 1);
+    });
+    for (var i = 0; i < TOTAL_STEPS; i++) {
+      var el = $('rcStep' + i);
+      if (el) el.classList.toggle('active', i === currentStep);
+    }
+    var prev = $('rcBtnPrev');
+    var next = $('rcBtnNext');
+    if (prev) prev.style.visibility = currentStep === 0 ? 'hidden' : 'visible';
+    if (next) {
+      next.disabled = false;
+      if (currentStep === TOTAL_STEPS - 1) {
+        next.setAttribute('data-i18n', 'ui.config.save_close');
+        next.textContent = T('ui.config.save_close', 'Save & Close');
+        next.onclick = function() {
+          if(window.RC && window.RC.saveToConfig) {
+            window.RC.saveToConfig(true);
+          } else {
+            closeWizard();
+          }
+        };
+      } else if (currentStep === 2) {
+        next.setAttribute('data-i18n', 'rc.btn.preview');
+        next.textContent = T('rc.btn.preview', 'Preview');
+        next.onclick = function() { nextStep(); };
+        _validateScheduleLive();
+      } else {
+        next.setAttribute('data-i18n', 'rc.btn.next');
+        next.textContent = T('rc.btn.next', 'Next');
+        next.onclick = function() { nextStep(); };
+        if (currentStep === 0) _validateSetupLive();
+      }
+    }
+  }
+
+  // ======================== VALIDATION ========================
+
+  function _validateStep(step) {
+    if (step === 0) {
+      var name = ($('rcCalendarName') || {}).value || '';
+      var errEl = $('rcStep0Error');
+      hide($('rcCalendarNameError'));
+      hide(errEl);
+      if (!name.trim()) {
+        _showFieldErr('rcCalendarNameError', T('rc.validation.name_required', 'Calendar name is required'));
+        return false;
+      }
+      // At least months or events must have data (validated later, allow passage)
+      return true;
+    }
+    if (step === 1) {
+      // Events step — no blocking validation, just warnings
+      hide($('rcStep1Error'));
+      return true;
+    }
+    if (step === 2) {
+      var warnings = _validateSchedule();
+      var warnEl = $('rcStep2Warning');
+      hide($('rcStep2Error'));
+      if (warnings.length > 0) {
+        warnEl.innerHTML = warnings.map(function(w) { return '⚠ ' + w; }).join('<br>');
+        show(warnEl);
+      } else {
+        hide(warnEl);
+      }
+      return true;
+    }
+    return true;
+  }
+
+  function _validateSchedule() {
+    var warnings = [];
+    var year = parseInt($('rcYear').value);
+    selectedMonths.forEach(function(m) {
+      var dates = {};
+      PHASES.forEach(function(p) {
+        var v = ($('rcDate_' + m + '_' + p) || {}).value || '';
+        dates[p] = v;
+      });
+      var order = PHASES.filter(function(p) { return dates[p]; });
+      for (var i = 1; i < order.length; i++) {
+        if (dates[order[i]] < dates[order[i-1]]) {
+          warnings.push(monthName(m) + ': ' + PHASE_LABELS[order[i]] + ' ' + T('rc.validation.before', 'is before') + ' ' + PHASE_LABELS[order[i-1]]);
+        }
+      }
+      PHASES.forEach(function(p) {
+        if (dates[p]) {
+          var d = new Date(dates[p] + 'T00:00:00');
+          if (d.getMonth() + 1 !== m || d.getFullYear() !== year) {
+            warnings.push(monthName(m) + ' ' + PHASE_LABELS[p] + ': ' + T('rc.validation.outside_month', 'date is outside the selected month'));
+          }
+        }
+      });
+    });
+    return warnings;
+  }
+
+  function _showFieldErr(id, msg) {
+    var el = $(id);
+    if (el) { el.textContent = msg; show(el); }
+  }
+
+  // ======================== SCHEDULE TABLE ========================
+
+  function _buildScheduleTable() {
+    var head = $('rcScheduleHead');
+    var body = $('rcScheduleBody');
+    if (!head || !body) return;
+    var showNotes = $('rcShowNotes').checked;
+    var colCount = PHASES.length + 1 + (showNotes ? 1 : 0);
+
+    // Group header row
+    var ghtml = '<tr class="rc-group-header-row"><th></th>';
+    PHASE_GROUPS.forEach(function(g) {
+      ghtml += '<th colspan="' + g.phases.length + '" style="background:' + g.color + '12;color:' + g.color + ';border-bottom:2px solid ' + g.color + ';">' + g.label + '</th>';
+    });
+    if (showNotes) ghtml += '<th></th>';
+    ghtml += '</tr>';
+
+    // Column header row
+    var hhtml = '<tr><th scope="col" class="rc-sticky-col">' + T('rc.table.month', 'Month') + '</th>';
+    PHASES.forEach(function(p) {
+      hhtml += '<th scope="col" class="rc-phase-' + p + '" title="' + PHASE_LABELS[p] + '">' + PHASE_LABELS[p] + '</th>';
+    });
+    if (showNotes) hhtml += '<th scope="col">' + T('rc.table.notes', 'Notes') + '</th>';
+    hhtml += '</tr>';
+    head.innerHTML = ghtml + hhtml;
+
+    var year = parseInt($('rcYear').value);
+    var bhtml = '';
+    var prevQ = 0;
+    selectedMonths.forEach(function(m) {
+      var q = quarterOf(m);
+      if ($('rcShowQuarters').checked && q !== prevQ) {
+        bhtml += '<tr class="rc-quarter-row"><td colspan="' + colCount + '">Q' + q + ' ' + year + '</td></tr>';
+        prevQ = q;
+      }
+      bhtml += '<tr><td class="rc-month-label rc-sticky-col">' + monthName(m) + '</td>';
+      PHASES.forEach(function(p) {
+        var existing = ($('rcDate_' + m + '_' + p) || {}).value || '';
+        var defaultDate = existing || _suggestDate(year, m, p);
+        bhtml += '<td><input type="date" id="rcDate_' + m + '_' + p + '" value="' + defaultDate + '" onchange="RC._onDateChange(this,' + m + ',\'' + p + '\')"></td>';
+      });
+      if (showNotes) {
+        var existingNotes = ($('rcNotes_' + m) || {}).value || '';
+        bhtml += '<td><input type="text" class="rc-notes-input" id="rcNotes_' + m + '" value="' + _escAttr(existingNotes) + '" placeholder="' + T('rc.field.notes_placeholder', 'Optional notes...') + '"></td>';
+      }
+      bhtml += '</tr>';
+    });
+    body.innerHTML = bhtml;
+    // Detect horizontal overflow for scroll hint
+    var sc = $('rcScheduleScroll');
+    if (sc) { sc.classList.toggle('has-overflow', sc.scrollWidth > sc.clientWidth + 2); }
+  }
+
+  function _suggestDate(year, month, phase) {
+    var offsets = {
+      feature_freeze: 1, promote_sit: 3, sit_start: 4, sit_end: 11,
+      fov_readiness: 14, promote_uat: 15, uat_end: 21,
+      hard_code_freeze: 22, uat2_install: 24, uat2_end: 27, prod_install: 28,
+      dev: 3, sit: 10, uat: 17, preprod: 22, prod: 26
+    };
+    var day = offsets[phase] || 15;
+    var lastDay = new Date(year, month, 0).getDate();
+    if (day > lastDay) day = lastDay;
+    var mm = month < 10 ? '0' + month : '' + month;
+    var dd = day < 10 ? '0' + day : '' + day;
+    return year + '-' + mm + '-' + dd;
+  }
+
+  function _onDateChange(input, month, phase) {
+    input.classList.remove('invalid');
+    var val = input.value;
+    if (!val) { _validateScheduleLive(); return; }
+    var phaseIdx = PHASES.indexOf(phase);
+    for (var i = 0; i < PHASES.length; i++) {
+      var other = ($('rcDate_' + month + '_' + PHASES[i]) || {}).value || '';
+      if (!other) continue;
+      if (i < phaseIdx && val < other) { input.classList.add('invalid'); _validateScheduleLive(); return; }
+      if (i > phaseIdx && val > other) { input.classList.add('invalid'); _validateScheduleLive(); return; }
+    }
+    _validateScheduleLive();
+  }
+
+  // ======================== PREVIEW ========================
+
+  function _buildPreview() {
+    var data = _collectData();
+    var html = '';
+
+    // Events table
+    if (data.events && data.events.length) {
+      html += '<h4 class="rc-sub-heading" style="margin-top:0;">' + T('rc.view.events_tab', 'Events') + ' (' + data.events.length + ')</h4>';
+      html += '<table class="rc-preview-table"><thead><tr>';
+      html += '<th scope="col" style="text-align:left;">' + T('rc.event.date', 'Date') + '</th>';
+      html += '<th scope="col">' + T('rc.event.phase', 'Phase') + '</th>';
+      html += '<th scope="col" style="text-align:left;">' + T('rc.event.label', 'Label') + '</th>';
+      html += '</tr></thead><tbody>';
+      data.events.sort(function(a,b) { return a.date.localeCompare(b.date); });
+      data.events.forEach(function(evt) {
+        html += '<tr>';
+        html += '<td style="text-align:left;">' + formatDateFull(evt.date) + ' <small style="opacity:.6">' + dayOfWeek(evt.date) + '</small></td>';
+        html += '<td class="rc-cell-' + evt.phase + '">' + PHASE_LABELS[evt.phase] + '</td>';
+        html += '<td style="text-align:left;">' + _esc(evt.label || '') + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      if (data.months.length) html += '<div class="mt-16" style="border-top:1px solid var(--border);"></div>';
+    }
+
+    // Monthly table
+    if (data.months.length) {
+      html += '<h4 class="rc-sub-heading" style="margin-top:0;">' + T('rc.view.monthly_tab', 'Monthly View') + ' (' + data.months.length + ')</h4>';
+      html += _renderPreviewTable(data);
+    }
+
+    $('rcPreviewWrapper').innerHTML = html;
+
+    var infoEl = $('rcStep3Info');
+    var filled = 0, total = 0;
+    var usedP = _detectUsedPhases(data.months);
+    data.months.forEach(function(m) {
+      usedP.forEach(function(p) { total++; if (m.phases[p]) filled++; });
+    });
+    var summary = '✓ ' + T('rc.preview.summary', 'Calendar ready');
+    if (data.events.length) summary += ' — ' + data.events.length + ' ' + T('rc.view.event_count', 'events');
+    if (data.months.length) summary += (data.events.length ? ', ' : ' — ') + data.months.length + ' ' + T('rc.preview.months', 'months') + ', ' + filled + '/' + total + ' ' + T('rc.preview.dates_filled', 'dates filled');
+    infoEl.textContent = summary;
+    show(infoEl);
+
+    _buildTimeline(data);
+  }
+
+  function _renderPreviewTable(data) {
+    var showWd = data.display.show_weekdays;
+    var showNotes = data.display.show_notes;
+    var showQ = data.display.show_quarter_headers;
+    // Detect which phases have data
+    var usedPhases = _detectUsedPhases(data.months);
+
+    var html = '<div class="rc-scroll-container"><table class="rc-preview-table rc-wide-table">';
+    // Group header if using enterprise milestones
+    if (_hasEnterpriseMilestones(usedPhases)) {
+      html += '<thead><tr class="rc-group-header-row"><th></th>';
+      PHASE_GROUPS.forEach(function(g) {
+        var cnt = g.phases.filter(function(p) { return usedPhases.indexOf(p) >= 0; }).length;
+        if (cnt > 0) html += '<th colspan="' + cnt + '" style="background:' + g.color + '12;color:' + g.color + ';border-bottom:2px solid ' + g.color + ';font-size:11px;">' + g.label + '</th>';
+      });
+      if (showNotes) html += '<th></th>';
+      html += '</tr>';
+    } else {
+      html += '<thead>';
+    }
+    html += '<tr><th class="rc-sticky-col" style="text-align:left;">' + T('rc.table.month', 'Month') + '</th>';
+    usedPhases.forEach(function(p) {
+      html += '<th class="rc-ph-' + p + '">' + PHASE_LABELS[p] + '</th>';
+    });
+    if (showNotes) html += '<th>' + T('rc.table.notes', 'Notes') + '</th>';
+    html += '</tr></thead><tbody>';
+
+    var prevQ = 0;
+    data.months.forEach(function(m) {
+      var q = quarterOf(m.month);
+      if (showQ && q !== prevQ) {
+        html += '<tr><td class="rc-quarter-hdr" colspan="' + (usedPhases.length + 1 + (showNotes ? 1 : 0)) + '">Q' + q + ' ' + data.year + '</td></tr>';
+        prevQ = q;
+      }
+      html += '<tr><td class="rc-month-cell rc-sticky-col">' + monthName(m.month) + '</td>';
+      usedPhases.forEach(function(p) {
+        var val = m.phases[p];
+        var display = val ? formatDate(val) : '\u2014';
+        if (showWd && val) display += ' <small style="opacity:.6">' + dayOfWeek(val) + '</small>';
+        html += '<td class="rc-cell-' + p + '">' + display + '</td>';
+      });
+      if (showNotes) html += '<td class="rc-notes-cell">' + _esc(m.notes || '') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  function _detectUsedPhases(months) {
+    var used = {};
+    (months || []).forEach(function(m) {
+      if (m.phases) Object.keys(m.phases).forEach(function(p) {
+        if (m.phases[p]) used[p] = true;
+      });
+    });
+    // Return in canonical order: enterprise first, then legacy
+    var ordered = [];
+    PHASES.forEach(function(p) { if (used[p]) ordered.push(p); });
+    LEGACY_PHASES.forEach(function(p) { if (used[p] && ordered.indexOf(p) < 0) ordered.push(p); });
+    // If nothing found, default to enterprise milestones
+    return ordered.length ? ordered : PHASES;
+  }
+
+  function _hasEnterpriseMilestones(usedPhases) {
+    return usedPhases.some(function(p) { return PHASES.indexOf(p) >= 0 && LEGACY_PHASES.indexOf(p) < 0; });
+  }
+
+  function _buildTimeline(data) {
+    var container = $('rcTimeline');
+    var allDates = [];
+    var usedP = _detectUsedPhases(data.months);
+    if (data.events) data.events.forEach(function(evt) { if (evt.date) allDates.push(evt.date); });
+    data.months.forEach(function(m) {
+      usedP.forEach(function(p) { if (m.phases[p]) allDates.push(m.phases[p]); });
+    });
+    if (allDates.length < 2) { container.innerHTML = ''; return; }
+    allDates.sort();
+    var minDate = new Date(allDates[0] + 'T00:00:00').getTime();
+    var maxDate = new Date(allDates[allDates.length - 1] + 'T00:00:00').getTime();
+    var range = maxDate - minDate || 1;
+
+    var html = '<h4 class="rc-section-heading">' + T('rc.preview.timeline', 'Timeline') + '</h4>';
+    data.months.forEach(function(m) {
+      html += '<div class="rc-timeline-row"><div class="rc-timeline-label">' + monthShort(m.month) + '</div><div class="rc-timeline-bar">';
+      usedP.forEach(function(p) {
+        if (!m.phases[p]) return;
+        var t = new Date(m.phases[p] + 'T00:00:00').getTime();
+        var left = ((t - minDate) / range * 100).toFixed(1);
+        var lbl = (PHASE_LABELS[p] || p).replace(/[^A-Z0-9]/gi, '').substring(0, 2);
+        html += '<div class="rc-timeline-segment seg-' + p + '" style="left:' + left + '%;width:18px;" title="' + _esc(PHASE_LABELS[p] || p) + ' ' + formatDateFull(m.phases[p]) + '">' + lbl + '</div>';
+      });
+      html += '</div></div>';
+    });
+    container.innerHTML = html;
+  }
+
+  // Export, preview, and import functions are in _scripts_release_calendar_ext.html.j2
+
+  // ======================== DATA COLLECTION ========================
+
+  function _collectData() {
+    var year = parseInt($('rcYear').value);
+    var months = [];
+    selectedMonths.forEach(function(m) {
+      var phases = {};
+      PHASES.forEach(function(p) {
+        phases[p] = ($('rcDate_' + m + '_' + p) || {}).value || '';
+      });
+      months.push({
+        month: m,
+        phases: phases,
+        notes: ($('rcNotes_' + m) || {}).value || ''
+      });
+    });
+    // Collect events (filter out empty)
+    var events = eventRows.filter(function(e) { return e.date && e.phase; }).map(function(e) {
+      var obj = { date: e.date, phase: e.phase };
+      if (e.label) obj.label = e.label;
+      if (e.notes) obj.notes = e.notes;
+      return obj;
+    });
+    return {
+      name: ($('rcCalendarName') || {}).value || '',
+      year: year,
+      notes: ($('rcCalendarNotes') || {}).value || '',
+      months: months,
+      events: events,
+      display: {
+        show_weekdays: $('rcShowWeekdays').checked,
+        show_notes: $('rcShowNotes').checked,
+        show_quarter_headers: $('rcShowQuarters').checked
+      }
+    };
+  }
+
+  function _esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+  function _escAttr(t) { return t.replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+  // ======================== LOAD FROM SERVER ========================
+
+  function _loadFromServer() {
+    return fetch('/api/release-calendar').then(function(r) { return r.json(); }).then(function(data) {
+      return data;
+    }).catch(function() { return null; });
+  }
+
+  function openWizardFromToolbar() {
+    _loadFromServer().then(function(existing) {
+      if (existing && existing.release_calendar && _calHasData(existing.release_calendar)) {
+        openWizard(existing);
+      } else {
+        openWizard(null);
+      }
+    });
+  }
+
+  function _calHasData(cal) {
+    return (cal.months && cal.months.length > 0) || (cal.events && cal.events.length > 0);
+  }
+
+  function deleteCalendar() {
+    window.showModal({
+      title: T('rc.delete.title', 'Delete Calendar'),
+      desc: T('rc.delete.confirm', 'Are you sure you want to delete the release calendar? This cannot be undone.'),
+      buttons: [
+        { label: T('ui.btn.cancel', 'Cancel') },
+        {
+          label: T('ui.btn.delete', 'Delete'),
+          cls: 'danger',
+          onClick: function() {
+            fetch('/api/release-calendar', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({})
+            }).then(function(r){ return r.json(); }).then(function(res){
+              if(res.ok) window.location.reload();
+              else if(window.showToast) window.showToast('Failed to delete calendar', 'error');
+            }).catch(function(){
+              if(window.showToast) window.showToast('Failed to delete calendar', 'error');
+            });
+            window.closeModal();
+          }
+        }
+      ]
+    });
+  }
+
+  function editCalendar() {
+    _loadFromServer().then(function(existing) {
+      if (existing && existing.release_calendar && _calHasData(existing.release_calendar)) {
+        openWizard(existing);
+      } else {
+        if(window.showToast) window.showToast(T('rc.edit.no_calendar', 'No calendar to edit. Create one first.'), 'info');
+      }
+    });
+  }
+
+  // ======================== PUBLIC API (wizard core) ========================
+  // Export, preview, and import methods are added by _scripts_release_calendar_ext.html.j2
+
+  window.RC = {
+    openWizard: openWizardFromToolbar,
+    closeWizard: closeWizard,
+    editCalendar: editCalendar,
+    deleteCalendar: deleteCalendar,
+    nextStep: nextStep,
+    prevStep: prevStep,
+    addEvent: addEvent,
+    removeEvent: removeEvent,
+    _onDateChange: _onDateChange,
+    _onEventChange: _onEventChange,
+    _validateSetupLive: _validateSetupLive,
+    _validateScheduleLive: _validateScheduleLive
+  };
+
+  // Expose internals for the extension module
+  window._RC_INTERNAL = {
+    $: $, T: T, show: show, hide: hide,
+    PHASES: PHASES, LEGACY_PHASES: LEGACY_PHASES, ALL_PHASES: ALL_PHASES,
+    PHASE_LABELS: PHASE_LABELS, PHASE_COLORS: PHASE_COLORS, PHASE_GROUPS: PHASE_GROUPS,
+    monthName: monthName, quarterOf: quarterOf,
+    formatDate: formatDate, formatDateFull: formatDateFull, dayOfWeek: dayOfWeek,
+    _esc: _esc, _escAttr: _escAttr,
+    _calHasData: _calHasData,
+    _loadFromServer: _loadFromServer,
+    _renderPreviewTable: _renderPreviewTable,
+    _detectUsedPhases: _detectUsedPhases,
+    _hasEnterpriseMilestones: _hasEnterpriseMilestones,
+    _collectData: _collectData
+  };
+
+  // Override with theme-aware colors if CSS variables are set
+  (function() {
+    var cs = getComputedStyle(document.documentElement);
+    var g = function(v) { return cs.getPropertyValue(v).trim(); };
+    var map = {'--phase-freeze':['feature_freeze','hard_code_freeze'],'--phase-sit':['promote_sit','sit_start','sit_end','sit'],'--phase-uat':['fov_readiness','promote_uat','uat_end','uat'],'--phase-uat2-prod':['uat2_install','uat2_end','preprod'],'--phase-prod':['prod_install','prod'],'--phase-dev':['dev']};
+    var gMap = {'freeze':'--phase-freeze','sit':'--phase-sit','uat':'--phase-uat','uat2_prod':'--phase-uat2-prod'};
+    Object.keys(map).forEach(function(v){var c=g(v);if(c)map[v].forEach(function(k){PHASE_COLORS[k]=c;});});
+    PHASE_GROUPS.forEach(function(gr){var v=gMap[gr.id];if(v&&g(v))gr.color=g(v);});
+  })();
+
+})();

@@ -1,0 +1,47 @@
+{
+  "release": {
+    "name": "Local Dev Release",
+    "target_month": 6,
+    "target_year": 2026,
+    "branch_pattern": "release/{YYYY}.{MM}"
+  },
+  "layers": [
+    {
+      "id": "services",
+      "label": "Services",
+      "color": "#8B5CF6"
+    },
+    {
+      "id": "libs",
+      "label": "Libraries",
+      "color": "#06B6D4"
+    }
+  ],
+  "repositories": [
+    {
+      "name": "MainApp",
+      "url": "/home/dev/projects/main-app",
+      "layer": "services",
+      "default_branch": "main"
+    },
+    {
+      "name": "CoreLib",
+      "url": "/home/dev/projects/core-lib",
+      "layer": "libs",
+      "default_branch": "main"
+    },
+    {
+      "name": "Utils",
+      "url": "/home/dev/projects/utils",
+      "layer": "libs",
+      "default_branch": "develop"
+    }
+  ],
+  "settings": {
+    "stale_threshold_days": 7,
+    "output_path": "output/dashboard.html",
+    "theme": "dark",
+    "timeout_seconds": 15,
+    "max_concurrent": 3
+  }
+}

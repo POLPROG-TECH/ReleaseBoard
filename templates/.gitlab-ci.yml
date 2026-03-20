@@ -1,0 +1,122 @@
+# =============================================================================
+# ReleaseBoard — GitLab CI/CD Pipeline
+# =============================================================================
+# Stages: lint → test → build → pages
+# Python 3.12+ | hatchling build system | pytest + ruff
+# =============================================================================
+
+stages:
+  - lint
+  - test
+  - build
+  - pages
+
+variables:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  PYTHONPATH: "src"
+
+# ---------------------------------------------------------------------------
+# Global cache — shared pip cache across all jobs
+# ---------------------------------------------------------------------------
+default:
+  cache:
+    key: pip-${CI_COMMIT_REF_SLUG}
+    paths:
+      - .pip-cache/
+    policy: pull-push
+
+# ---------------------------------------------------------------------------
+# Workflow rules — run on merge requests and pushes to main
+# ---------------------------------------------------------------------------
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ===========================================================================
+# Stage 1: Lint
+# ===========================================================================
+ruff-lint:
+  stage: lint
+  image: python:3.12-slim
+  before_script:
+    - pip install --quiet ruff
+  script:
+    - ruff check src/ tests/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ===========================================================================
+# Stage 2: Test (matrix — Python 3.12 + 3.13)
+# ===========================================================================
+test:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  parallel:
+    matrix:
+      - PYTHON_VERSION: ["3.12", "3.13"]
+  before_script:
+    - pip install --quiet -e ".[dev]"
+  script:
+    - pytest
+        --cov=releaseboard
+        --cov-report=term-missing
+        --cov-report=xml:coverage.xml
+        --junitxml=report.xml
+        -q
+  artifacts:
+    when: always
+    paths:
+      - coverage.xml
+      - report.xml
+    reports:
+      junit: report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    expire_in: 30 days
+  coverage: '/TOTAL.*\s(\d+%)$/'
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ===========================================================================
+# Stage 3: Build
+# ===========================================================================
+build-wheel:
+  stage: build
+  image: python:3.12-slim
+  before_script:
+    - pip install --quiet build
+    - pip install --quiet -e .
+  script:
+    - python -m build
+    - releaseboard validate --config examples/config.json
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 90 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ===========================================================================
+# Stage 4: Pages — deploy docs/ to GitLab Pages (main only)
+# ===========================================================================
+pages:
+  stage: pages
+  image: python:3.12-slim
+  script:
+    - mkdir -p public
+    - cp -r docs/* public/
+    - cp -f docs/assets/* public/assets/ 2>/dev/null || true
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  environment:
+    name: documentation
+    url: $CI_PAGES_URL

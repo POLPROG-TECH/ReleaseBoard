@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="{{ locale }}" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ReleaseBoard — Setup</title>
+<script>
+/* i18n — locale persistence: redirect to stored locale if no explicit ?lang= */
+(function() {
+  var stored = localStorage.getItem('rb_locale');
+  if (stored && !new URLSearchParams(window.location.search).has('lang')) {
+    var url = new URL(window.location.href);
+    url.searchParams.set('lang', stored);
+    window.location.replace(url.toString());
+  }
+})();
+</script>
+<style>
+/* ── Design tokens (light) ── */
+:root {
+  --primary: #fb6400;
+  --primary-hover: #e55500;
+  --primary-light: #fb640015;
+  --ring: #fb640033;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-xs: 4px;
+  --radius-md: 12px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.04);
+  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-md: 0 4px 6px rgba(0,0,0,.06), 0 2px 4px rgba(0,0,0,.04);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,.08), 0 4px 10px rgba(0,0,0,.04);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-hover: #f1f5f9;
+  --bg-input: #ffffff;
+  --border: #e2e8f0;
+  --border-light: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #94a3b8;
+  --text-muted: #64748b;
+  --transition: 180ms ease;
+  --font-size-sm: 12px;
+}
+/* ── Dark theme ── */
+[data-theme="dark"] {
+  --bg-primary: #0f172a; --bg-secondary: #1e293b; --bg-tertiary: #334155;
+  --bg-card: #1e293b; --bg-hover: #334155; --bg-input: #1e293b;
+  --border: #334155; --border-light: #1e293b;
+  --text-primary: #f1f5f9; --text-secondary: #94a3b8; --text-tertiary: #64748b;
+  --text-muted: #94a3b8; --ring: #fb640044;
+}
+/* ── Midnight theme ── */
+[data-theme="midnight"] {
+  --primary-light: #fb640018;
+  --bg-primary: #0c0e14; --bg-secondary: #12151e; --bg-tertiary: #1a1e2e;
+  --bg-card: #141722; --bg-hover: #1e2236; --bg-input: #12151e;
+  --border: #232840; --border-light: #1a1e2e;
+  --text-primary: #e8ecf4; --text-secondary: #9dabc2; --text-tertiary: #7484a0;
+  --text-muted: #8da0b8; --ring: #fb640033;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.2);
+  --shadow: 0 1px 3px rgba(0,0,0,.3), 0 1px 2px rgba(0,0,0,.2);
+  --shadow-md: 0 4px 8px rgba(0,0,0,.25), 0 2px 4px rgba(0,0,0,.15);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,.4), 0 4px 8px rgba(0,0,0,.2);
+}
+/* ── System theme (follows OS preference) ── */
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    --bg-primary: #0f172a; --bg-secondary: #1e293b; --bg-tertiary: #334155;
+    --bg-card: #1e293b; --bg-hover: #334155; --bg-input: #1e293b;
+    --border: #334155; --border-light: #1e293b;
+    --text-primary: #f1f5f9; --text-secondary: #94a3b8; --text-tertiary: #64748b;
+    --text-muted: #94a3b8; --ring: #fb640044;
+  }
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── Header (shared shell pattern) ── */
+.fr-header {
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.fr-header-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  gap: 16px;
+}
+.fr-header-logo { display: flex; align-items: center; flex-shrink: 0; }
+.fr-header-logo svg { height: 50px; width: auto; }
+/* Logo theme variants — use .fr-header-logo prefix for specificity > 0,1,1 */
+.fr-header-logo .fr-logo-light { display: block; }
+.fr-header-logo .fr-logo-dark,
+.fr-header-logo .fr-logo-midnight { display: none; }
+[data-theme="dark"] .fr-header-logo .fr-logo-light { display: none; }
+[data-theme="dark"] .fr-header-logo .fr-logo-dark { display: block; }
+[data-theme="midnight"] .fr-header-logo .fr-logo-light { display: none; }
+[data-theme="midnight"] .fr-header-logo .fr-logo-midnight { display: block; }
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] .fr-header-logo .fr-logo-light { display: none; }
+  [data-theme="system"] .fr-header-logo .fr-logo-dark { display: block; }
+}
+.fr-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Settings trigger (gear icon) ── */
+.fr-settings-wrap { position: relative; }
+.fr-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  transition: all var(--transition);
+  flex-shrink: 0;
+}
+.fr-settings-btn:hover,
+.fr-settings-wrap.open .fr-settings-btn {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-light);
+}
+.fr-settings-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 500;
+  animation: frFadeIn .15s ease-out;
+}
+.fr-settings-wrap.open .fr-settings-panel { display: block; }
+@keyframes frFadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+.fr-settings-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.fr-settings-section:last-child { border-bottom: none; }
+.fr-settings-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-tertiary);
+  margin-bottom: 10px;
+}
+
+/* ── Shared button group (theme / language) ── */
+.fr-btn-group {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.fr-toggle-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font);
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.fr-toggle-btn + .fr-toggle-btn { border-left: 1px solid var(--border); }
+.fr-toggle-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.fr-toggle-btn.active { background: var(--primary); color: #fff; font-weight: 600; }
+
+/* ── Main content wrapper ── */
+.fr-wrapper {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 24px 40px;
+  flex: 1;
+  width: 100%;
+}
+
+/* ── Hero ── */
+.fr-hero { text-align: center; margin-bottom: 40px; }
+.fr-hero h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+.fr-hero p {
+  font-size: 15px;
+  color: var(--text-secondary);
+  max-width: 480px;
+  margin: 0 auto 16px;
+}
+.fr-config-path {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.fr-config-path code {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* ── Option cards ── */
+.fr-cards { display: flex; flex-direction: column; gap: 16px; margin-bottom: 40px; }
+.fr-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  transition: border-color var(--transition), box-shadow var(--transition);
+  cursor: pointer;
+  position: relative;
+}
+.fr-card:hover { border-color: var(--primary); box-shadow: var(--shadow-md); }
+.fr-card.active { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-light), var(--shadow-md); }
+.fr-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.fr-card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.fr-card-icon.fresh { background: #fb640015; }
+.fr-card-icon.wizard { background: #10b98115; }
+.fr-card-icon.example { background: #3b82f615; }
+.fr-card-icon.import { background: #8b5cf615; }
+.fr-card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.fr-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--primary);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.fr-card-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 0;
+}
+
+/* ── Expandable form bodies ── */
+.fr-card-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 300ms ease, margin-top 300ms ease, opacity 200ms ease;
+  opacity: 0;
+  margin-top: 0;
+}
+.fr-card.active .fr-card-body {
+  max-height: 600px;
+  opacity: 1;
+  margin-top: 20px;
+}
+
+/* ── Form elements ── */
+.fr-form-group { margin-bottom: 14px; }
+.fr-form-group:last-child { margin-bottom: 0; }
+.fr-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.fr-input, .fr-select, .fr-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  transition: border-color var(--transition), box-shadow var(--transition);
+  outline: none;
+}
+.fr-input:focus, .fr-select:focus, .fr-textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+.fr-textarea {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 140px;
+}
+.fr-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.fr-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+/* ── Action buttons ── */
+.fr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 20px;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition), transform 80ms ease;
+  width: 100%;
+}
+.fr-btn:active { transform: scale(0.98); }
+.fr-btn.primary { background: var(--primary); color: #fff; }
+.fr-btn.primary:hover { background: var(--primary-hover); }
+.fr-btn.primary:disabled { background: var(--text-tertiary); cursor: not-allowed; transform: none; }
+.fr-btn.secondary { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); }
+.fr-btn.secondary:hover { background: var(--border-light); }
+
+/* ── Examples list ── */
+.fr-examples-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.fr-example-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+}
+.fr-example-item:hover { background: var(--bg-tertiary); border-color: var(--primary); }
+.fr-example-item.selected { border-color: var(--primary); background: var(--primary-light); }
+.fr-example-name { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.fr-example-file { color: var(--text-tertiary); font-size: 12px; }
+.fr-example-meta { font-size: 12px; color: var(--text-tertiary); }
+.fr-no-examples { text-align: center; color: var(--text-tertiary); font-size: 13px; padding: 16px; }
+
+/* ── Status messages ── */
+.fr-message {
+  padding: 10px 14px;
+  border-radius: var(--radius-xs);
+  font-size: 13px;
+  margin-top: 12px;
+  display: none;
+}
+.fr-message.error { display: block; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+.fr-message.success { display: block; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.fr-message.info { display: block; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+[data-theme="dark"] .fr-message.error, [data-theme="midnight"] .fr-message.error { background: #450a0a; border-color: #7f1d1d; color: #fca5a5; }
+[data-theme="dark"] .fr-message.success, [data-theme="midnight"] .fr-message.success { background: #052e16; border-color: #166534; color: #86efac; }
+[data-theme="dark"] .fr-message.info, [data-theme="midnight"] .fr-message.info { background: #1e3a5f; border-color: #1e40af; color: #93c5fd; }
+
+/* ── Footer (matches dashboard rb-footer) ── */
+.rb-footer {
+  border-top: 1px solid var(--border);
+  margin-top: 40px;
+  font-size: var(--font-size-sm, 12px);
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: 20px 0 24px;
+  transition: border-color var(--transition);
+}
+.rb-footer-copyright { font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
+.rb-footer-tools { font-size: 12px; color: var(--text-tertiary); }
+.rb-footer-brand { font-weight: 600; color: var(--text-secondary); text-decoration: none; }
+.rb-footer-brand:hover { color: var(--primary); text-decoration: underline; }
+.rb-footer-author { font-weight: 700; color: var(--text-secondary); text-decoration: none; letter-spacing: 0.5px; }
+.rb-footer-author:hover { color: var(--primary); text-decoration: underline; }
+
+/* ── Spinner ── */
+.fr-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: fr-spin 0.6s linear infinite;
+}
+@keyframes fr-spin { to { transform: rotate(360deg); } }
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .fr-wrapper { padding: 32px 16px 32px; }
+  .fr-hero h1 { font-size: 22px; }
+  .fr-row { grid-template-columns: 1fr; }
+  .fr-card { padding: 18px; }
+  .fr-header-logo svg { height: 34px; }
+  .fr-settings-panel { width: 240px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER (shared shell) ═══ -->
+<header class="fr-header">
+  <div class="fr-header-inner">
+    <div class="fr-header-logo">
+      <!-- Light logo -->
+      <svg class="fr-logo-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 410 112" fill="none" role="img" aria-label="ReleaseBoard">
+        <defs><linearGradient id="hbg" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#fb6400"/><stop offset="100%" stop-color="#e55500"/></linearGradient><linearGradient id="hck" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#ffe0cc"/></linearGradient></defs>
+        <rect x="8" y="12" width="96" height="96" rx="20" fill="url(#hbg)"/>
+        <path d="M40 36 L40 64 Q40 76 52 76 L72 76" stroke="url(#hck)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <path d="M40 48 Q40 56 50 56 L62 56" stroke="url(#hck)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <circle cx="40" cy="36" r="5" fill="#fff"/><circle cx="72" cy="76" r="5" fill="#fff"/><circle cx="62" cy="56" r="5" fill="#fff"/>
+        <path d="M58 82 L66 90 L82 70" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.5"/>
+        <text x="120" y="56" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="38" font-weight="700" fill="#1a1a2e">Release</text>
+        <text x="270" y="56" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="38" font-weight="700" fill="#fb6400">Board</text>
+        <text x="120" y="82" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="14" font-weight="400" fill="#6b7280" letter-spacing="0.5">Release Readiness Intelligence</text>
+      </svg>
+      <!-- Dark logo -->
+      <svg class="fr-logo-dark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 410 112" fill="none" role="img" aria-label="ReleaseBoard">
+        <defs><linearGradient id="hbg2" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#fb6400"/><stop offset="100%" stop-color="#e55500"/></linearGradient><linearGradient id="hck2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#ffe0cc"/></linearGradient></defs>
+        <rect x="8" y="12" width="96" height="96" rx="20" fill="url(#hbg2)"/>
+        <path d="M40 36 L40 64 Q40 76 52 76 L72 76" stroke="url(#hck2)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <path d="M40 48 Q40 56 50 56 L62 56" stroke="url(#hck2)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <circle cx="40" cy="36" r="5" fill="#fff"/><circle cx="72" cy="76" r="5" fill="#fff"/><circle cx="62" cy="56" r="5" fill="#fff"/>
+        <path d="M58 82 L66 90 L82 70" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.5"/>
+        <text x="120" y="56" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="38" font-weight="700" fill="#e2e8f0">Release</text>
+        <text x="270" y="56" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="38" font-weight="700" fill="#fb6400">Board</text>
+        <text x="120" y="82" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="14" font-weight="400" fill="#94a3b8" letter-spacing="0.5">Release Readiness Intelligence</text>
+      </svg>
+      <!-- Midnight logo -->
+      <svg class="fr-logo-midnight" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 410 112" fill="none" role="img" aria-label="ReleaseBoard">
+        <defs><linearGradient id="hbg3" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#fb6400"/><stop offset="100%" stop-color="#e55500"/></linearGradient><linearGradient id="hck3" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#ffe0cc"/></linearGradient></defs>
+        <rect x="8" y="12" width="96" height="96" rx="20" fill="url(#hbg3)"/>
+        <path d="M40 36 L40 64 Q40 76 52 76 L72 76" stroke="url(#hck3)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <path d="M40 48 Q40 56 50 56 L62 56" stroke="url(#hck3)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <circle cx="40" cy="36" r="5" fill="#fff"/><circle cx="72" cy="76" r="5" fill="#fff"/><circle cx="62" cy="56" r="5" fill="#fff"/>
+        <path d="M58 82 L66 90 L82 70" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.5"/>
+        <text x="120" y="56" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="38" font-weight="700" fill="#e8ecf4">Release</text>
+        <text x="270" y="56" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="38" font-weight="700" fill="#fb6400">Board</text>
+        <text x="120" y="82" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="14" font-weight="400" fill="#7484a0" letter-spacing="0.5">Release Readiness Intelligence</text>
+      </svg>
+    </div>
+    <div class="fr-header-controls">
+      <!-- Settings gear -->
+      <div class="fr-settings-wrap" id="frSettings">
+        <button class="fr-settings-btn" onclick="frToggleSettings()" aria-label="Quick settings" title="Settings">⚙</button>
+        <div class="fr-settings-panel" onclick="event.stopPropagation()">
+          <!-- Language -->
+          <div class="fr-settings-section">
+            <div class="fr-settings-title" data-i18n="ui.quick_settings.language">Language</div>
+            <div class="fr-btn-group">
+              <button class="fr-toggle-btn{% if locale == 'en' %} active{% endif %}" data-fr-locale="en">English</button>
+              <button class="fr-toggle-btn{% if locale == 'pl' %} active{% endif %}" data-fr-locale="pl">Polski</button>
+            </div>
+          </div>
+          <!-- Theme -->
+          <div class="fr-settings-section">
+            <div class="fr-settings-title" data-i18n="ui.quick_settings.theme">Theme</div>
+            <div class="fr-btn-group">
+              <button class="fr-toggle-btn active" data-fr-theme="light" data-i18n="ui.theme.light">Light</button>
+              <button class="fr-toggle-btn" data-fr-theme="system" data-i18n="ui.theme.auto">Auto</button>
+              <button class="fr-toggle-btn" data-fr-theme="dark" data-i18n="ui.theme.dark">Dark</button>
+              <button class="fr-toggle-btn" data-fr-theme="midnight" data-i18n="ui.theme.midnight">Midnight</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ MAIN CONTENT ═══ -->
+<div class="fr-wrapper">
+  <!-- Hero -->
+  <div class="fr-hero">
+    <h1 data-i18n="first_run.title">Welcome to ReleaseBoard</h1>
+    <p data-i18n="first_run.subtitle">No configuration file found. Let's set up your first configuration.</p>
+    <div class="fr-config-path">
+      <span data-i18n="first_run.config_path">Configuration will be saved to:</span>
+      <code>{{ config_path }}</code>
+    </div>
+  </div>
+
+  <!-- Option cards -->
+  <div class="fr-cards">
+
+    <!-- Card 1: Start Fresh (recommended) -->
+    <div class="fr-card active" data-card="fresh" onclick="selectCard('fresh')">
+      <div class="fr-card-header">
+        <div class="fr-card-icon fresh">🚀</div>
+        <span class="fr-card-title" data-i18n="first_run.start_fresh">Start Fresh</span>
+        <span class="fr-badge" data-i18n="first_run.recommended">Recommended</span>
+      </div>
+      <p class="fr-card-desc" data-i18n="first_run.start_fresh_desc">Create a minimal empty configuration with default layers and no repositories.</p>
+      <div class="fr-card-body">
+        <div class="fr-form-group">
+          <label class="fr-label" for="releaseName" data-i18n="first_run.release_name">Release Name</label>
+          <input class="fr-input" type="text" id="releaseName" spellcheck="false">
+        </div>
+        <div class="fr-row">
+          <div class="fr-form-group">
+            <label class="fr-label" for="targetMonth" data-i18n="first_run.target_month">Target Month</label>
+            <select class="fr-select" id="targetMonth">
+              <option value="1">January</option>
+              <option value="2">February</option>
+              <option value="3">March</option>
+              <option value="4">April</option>
+              <option value="5">May</option>
+              <option value="6">June</option>
+              <option value="7">July</option>
+              <option value="8">August</option>
+              <option value="9">September</option>
+              <option value="10">October</option>
+              <option value="11">November</option>
+              <option value="12">December</option>
+            </select>
+          </div>
+          <div class="fr-form-group">
+            <label class="fr-label" for="targetYear" data-i18n="first_run.target_year">Target Year</label>
+            <input class="fr-input" type="number" id="targetYear" min="2020" max="2099">
+          </div>
+        </div>
+        <div class="fr-form-group">
+          <label class="fr-label" for="branchPattern" data-i18n="first_run.branch_pattern">Branch Pattern</label>
+          <input class="fr-input" type="text" id="branchPattern" value="release/{YYYY}.{MM}" spellcheck="false">
+        </div>
+        <button class="fr-btn primary" id="btnCreateFresh" onclick="createFresh()" data-i18n="first_run.create_config">Create Configuration</button>
+        <div class="fr-message" id="msgFresh"></div>
+      </div>
+    </div>
+
+    <!-- Card 2: Prepare Config (wizard — scan repos from GitHub/GitLab) -->
+    <div class="fr-card" data-card="wizard" onclick="selectCard('wizard')">
+      <div class="fr-card-header">
+        <div class="fr-card-icon wizard">🧙</div>
+        <span class="fr-card-title" data-i18n="first_run.prepare_config">Prepare Config</span>
+      </div>
+      <p class="fr-card-desc" data-i18n="first_run.prepare_config_desc">Auto-discover repositories from GitHub or GitLab and build a full configuration with the setup wizard.</p>
+      <div class="fr-card-body">
+        <p class="fr-hint" data-i18n="first_run.prepare_config_hint">Creates a starter configuration and opens the Prepare Config wizard where you can define layers, scan organizations, and discover repositories automatically.</p>
+        <button class="fr-btn primary" id="btnPrepareConfig" onclick="prepareConfig()" data-i18n="first_run.launch_wizard">Launch Wizard</button>
+        <div class="fr-message" id="msgWizard"></div>
+      </div>
+    </div>
+
+    <!-- Card 3: Import from Example -->
+    <div class="fr-card" data-card="example" onclick="selectCard('example')">
+      <div class="fr-card-header">
+        <div class="fr-card-icon example">📋</div>
+        <span class="fr-card-title" data-i18n="first_run.import_example">Import from Example</span>
+      </div>
+      <p class="fr-card-desc" data-i18n="first_run.import_example_desc">Start with a pre-built example configuration.</p>
+      <div class="fr-card-body">
+        <div class="fr-examples-list" id="examplesList">
+          <div class="fr-no-examples" data-i18n="first_run.no_examples">Loading examples...</div>
+        </div>
+        <button class="fr-btn primary" id="btnUseExample" onclick="useExample()" disabled data-i18n="first_run.use_example">Use This Example</button>
+        <div class="fr-message" id="msgExample"></div>
+      </div>
+    </div>
+
+    <!-- Card 4: Import JSON -->
+    <div class="fr-card" data-card="import" onclick="selectCard('import')">
+      <div class="fr-card-header">
+        <div class="fr-card-icon import">📝</div>
+        <span class="fr-card-title" data-i18n="first_run.import_json">Import JSON</span>
+      </div>
+      <p class="fr-card-desc" data-i18n="first_run.import_json_desc">Paste your own configuration JSON.</p>
+      <div class="fr-card-body">
+        <div class="fr-form-group">
+          <textarea class="fr-textarea" id="importJson" placeholder='{"release": {"name": "...", "target_month": 1, "target_year": 2025}, "repositories": []}'></textarea>
+        </div>
+        <button class="fr-btn primary" id="btnImportJson" onclick="importJson()" data-i18n="first_run.validate_import">Validate &amp; Import</button>
+        <div class="fr-message" id="msgImport"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ FOOTER (shared shell — matches dashboard rb-footer) ═══ -->
+<footer class="rb-footer">
+  <div class="rb-footer-copyright">
+    &copy; {{ year }} <a class="rb-footer-author" href="https://polprog.pl/" target="_blank">POLPROG</a>.
+    <span data-i18n="ui.footer.all_rights">All rights reserved.</span>
+  </div>
+  <div class="rb-footer-tools">
+    <span data-i18n="ui.footer.built_with">Dashboard built with</span>
+    <a class="rb-footer-brand" href="https://github.com/polprog-tech/ReleaseBoard" target="_blank">ReleaseBoard</a>
+    v{{ version }}
+    &amp;
+    <a class="rb-footer-brand" href="https://github.com/polprog-tech/ReleasePilot" target="_blank">ReleasePilot</a>
+    {% if rp_version and rp_version != '0.0.0' %}v{{ rp_version }}{% endif %}
+  </div>
+</footer>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ── I18N (inline — no dependency on full i18n system) ── */
+  var I18N = {
+    en: {
+      'first_run.title': 'Welcome to ReleaseBoard',
+      'first_run.subtitle': "No configuration file found. Let\u2019s set up your first configuration.",
+      'first_run.config_path': 'Configuration will be saved to:',
+      'first_run.start_fresh': 'Start Fresh',
+      'first_run.start_fresh_desc': 'Create a minimal empty configuration with default layers and no repositories.',
+      'first_run.prepare_config': 'Prepare Config',
+      'first_run.prepare_config_desc': 'Auto-discover repositories from GitHub or GitLab and build a full configuration with the setup wizard.',
+      'first_run.prepare_config_hint': 'Creates a starter configuration and opens the Prepare Config wizard where you can define layers, scan organizations, and discover repositories automatically.',
+      'first_run.launch_wizard': 'Launch Wizard',
+      'first_run.import_example': 'Import from Example',
+      'first_run.import_example_desc': 'Start with a pre-built example configuration.',
+      'first_run.import_json': 'Import JSON',
+      'first_run.import_json_desc': 'Paste your own configuration JSON.',
+      'first_run.release_name': 'Release Name',
+      'first_run.target_month': 'Target Month',
+      'first_run.target_year': 'Target Year',
+      'first_run.branch_pattern': 'Branch Pattern',
+      'first_run.create_config': 'Create Configuration',
+      'first_run.use_example': 'Use This Example',
+      'first_run.validate_import': 'Validate & Import',
+      'first_run.creating': 'Creating configuration\u2026',
+      'first_run.success': 'Configuration created! Redirecting\u2026',
+      'first_run.error': 'Error creating configuration',
+      'first_run.invalid_json': 'Invalid JSON',
+      'first_run.no_examples': 'No example configurations found.',
+      'first_run.recommended': 'Recommended',
+      'ui.quick_settings.language': 'Language',
+      'ui.quick_settings.theme': 'Theme',
+      'ui.theme.light': 'Light',
+      'ui.theme.auto': 'Auto',
+      'ui.theme.dark': 'Dark',
+      'ui.theme.midnight': 'Midnight',
+      'ui.footer.all_rights': 'All rights reserved.',
+      'ui.footer.built_with': 'Dashboard built with',
+    },
+    pl: {
+      'first_run.title': 'Witaj w ReleaseBoard',
+      'first_run.subtitle': 'Nie znaleziono pliku konfiguracyjnego. Skonfigurujmy Twoje pierwsze ustawienia.',
+      'first_run.config_path': 'Konfiguracja zostanie zapisana do:',
+      'first_run.start_fresh': 'Zacznij od nowa',
+      'first_run.start_fresh_desc': 'Utw\u00f3rz minimaln\u0105 pust\u0105 konfiguracj\u0119 z domy\u015blnymi warstwami, bez repozytori\u00f3w.',
+      'first_run.prepare_config': 'Przygotuj konfiguracj\u0119',
+      'first_run.prepare_config_desc': 'Automatycznie wykryj repozytoria z GitHub lub GitLab i zbuduj pe\u0142n\u0105 konfiguracj\u0119 za pomoc\u0105 kreatora.',
+      'first_run.prepare_config_hint': 'Tworzy pocz\u0105tkow\u0105 konfiguracj\u0119 i otwiera kreator, w kt\u00f3rym mo\u017cesz zdefiniowa\u0107 warstwy, skanowa\u0107 organizacje i automatycznie wykrywa\u0107 repozytoria.',
+      'first_run.launch_wizard': 'Uruchom kreator',
+      'first_run.import_example': 'Importuj z przyk\u0142adu',
+      'first_run.import_example_desc': 'Rozpocznij od gotowej przyk\u0142adowej konfiguracji.',
+      'first_run.import_json': 'Importuj JSON',
+      'first_run.import_json_desc': 'Wklej w\u0142asn\u0105 konfiguracj\u0119 JSON.',
+      'first_run.release_name': 'Nazwa wydania',
+      'first_run.target_month': 'Docelowy miesi\u0105c',
+      'first_run.target_year': 'Docelowy rok',
+      'first_run.branch_pattern': 'Wzorzec ga\u0142\u0119zi',
+      'first_run.create_config': 'Utw\u00f3rz konfiguracj\u0119',
+      'first_run.use_example': 'U\u017cyj tego przyk\u0142adu',
+      'first_run.validate_import': 'Zweryfikuj i importuj',
+      'first_run.creating': 'Tworzenie konfiguracji\u2026',
+      'first_run.success': 'Konfiguracja utworzona! Przekierowuj\u0119\u2026',
+      'first_run.error': 'B\u0142\u0105d tworzenia konfiguracji',
+      'first_run.invalid_json': 'Nieprawid\u0142owy JSON',
+      'first_run.no_examples': 'Nie znaleziono przyk\u0142adowych konfiguracji.',
+      'first_run.recommended': 'Zalecane',
+      'ui.quick_settings.language': 'J\u0119zyk',
+      'ui.quick_settings.theme': 'Motyw',
+      'ui.theme.light': 'Jasny',
+      'ui.theme.auto': 'Auto',
+      'ui.theme.dark': 'Ciemny',
+      'ui.theme.midnight': 'P\u00f3\u0142noc',
+      'ui.footer.all_rights': 'Wszelkie prawa zastrze\u017cone.',
+      'ui.footer.built_with': 'Dashboard zbudowany z',
+    }
+  };
+
+  var locale = document.documentElement.lang || 'en';
+  var catalog = I18N[locale] || I18N['en'];
+
+  /* Build redirect URL preserving the current locale */
+  function withLang(url) {
+    var u = new URL(url, window.location.origin);
+    u.searchParams.set('lang', locale);
+    return u.pathname + u.search;
+  }
+
+  function getText(key) {
+    return catalog[key] || I18N['en'][key] || key;
+  }
+
+  /* ── Apply i18n to DOM ── */
+  document.querySelectorAll('[data-i18n]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n');
+    var text = getText(key);
+    if (text !== key) el.textContent = text;
+  });
+
+  /* ── Theme handling (matches dashboard pattern) ── */
+  function setTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    document.querySelectorAll('[data-fr-theme]').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.frTheme === t);
+    });
+    try { localStorage.setItem('rb-theme', t); } catch(e) {}
+  }
+
+  document.querySelectorAll('[data-fr-theme]').forEach(function(b) {
+    b.addEventListener('click', function(e) {
+      e.stopPropagation();
+      setTheme(b.dataset.frTheme);
+    });
+  });
+
+  // Restore saved theme
+  try {
+    var saved = localStorage.getItem('rb-theme');
+    if (saved) setTheme(saved);
+  } catch(e) {}
+
+  /* ── Language switching ── */
+  document.querySelectorAll('[data-fr-locale]').forEach(function(b) {
+    b.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var newLocale = b.dataset.frLocale;
+      localStorage.setItem('rb_locale', newLocale);
+      sessionStorage.setItem('fr_restore_settings', 'true');
+      var url = new URL(window.location.href);
+      url.searchParams.set('lang', newLocale);
+      window.location.href = url.toString();
+    });
+  });
+
+  /* ── Settings panel toggle ── */
+  var settingsOpen = false;
+  var settingsWrap = document.getElementById('frSettings');
+
+  window.frToggleSettings = function() {
+    settingsOpen = !settingsOpen;
+    settingsWrap.classList.toggle('open', settingsOpen);
+  };
+
+  document.addEventListener('click', function(e) {
+    if (settingsOpen && !e.target.closest('#frSettings')) {
+      settingsOpen = false;
+      settingsWrap.classList.remove('open');
+    }
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && settingsOpen) {
+      settingsOpen = false;
+      settingsWrap.classList.remove('open');
+    }
+  });
+
+  /* Restore settings panel after language-change reload */
+  if (sessionStorage.getItem('fr_restore_settings') === 'true') {
+    sessionStorage.removeItem('fr_restore_settings');
+    setTimeout(function() { if (!settingsOpen) frToggleSettings(); }, 50);
+  }
+
+  /* ── Form defaults ── */
+  var now = new Date();
+  var monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('releaseName').value = monthNames[now.getMonth()] + ' ' + now.getFullYear() + ' Release';
+  document.getElementById('targetMonth').value = String(now.getMonth() + 1);
+  document.getElementById('targetYear').value = String(now.getFullYear());
+
+  var selectedExample = null;
+
+  /* ── Load examples ── */
+  fetch('/api/examples')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var list = document.getElementById('examplesList');
+      if (!data.ok || !data.examples || data.examples.length === 0) {
+        list.innerHTML = '<div class="fr-no-examples">' + getText('first_run.no_examples') + '</div>';
+        return;
+      }
+      list.innerHTML = '';
+      data.examples.forEach(function(ex) {
+        var item = document.createElement('div');
+        item.className = 'fr-example-item';
+        item.dataset.name = ex.name;
+        item.innerHTML =
+          '<span class="fr-example-name">' + esc(ex.title) + ' <span class="fr-example-file">(' + esc(ex.name) + ')</span></span>' +
+          '<span class="fr-example-meta">' + ex.repos + ' repos · ' + ex.layers + ' layers</span>';
+        item.onclick = function(e) {
+          e.stopPropagation();
+          list.querySelectorAll('.fr-example-item').forEach(function(i) { i.classList.remove('selected'); });
+          item.classList.add('selected');
+          selectedExample = ex.name;
+          document.getElementById('btnUseExample').disabled = false;
+        };
+        list.appendChild(item);
+      });
+    })
+    .catch(function() {
+      document.getElementById('examplesList').innerHTML = '<div class="fr-no-examples">Failed to load examples.</div>';
+    });
+
+  /* ── Card selection ── */
+  window.selectCard = function(card) {
+    document.querySelectorAll('.fr-card').forEach(function(c) { c.classList.remove('active'); });
+    var el = document.querySelector('.fr-card[data-card="' + card + '"]');
+    if (el) el.classList.add('active');
+  };
+
+  /* ── Create fresh config ── */
+  window.createFresh = async function() {
+    var btn = document.getElementById('btnCreateFresh');
+    var msg = document.getElementById('msgFresh');
+    setBtnLoading(btn, true);
+    clearMsg(msg);
+    try {
+      var res = await fetch('/api/config/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          mode: 'empty',
+          release_name: document.getElementById('releaseName').value,
+          target_month: parseInt(document.getElementById('targetMonth').value, 10),
+          target_year: parseInt(document.getElementById('targetYear').value, 10),
+          branch_pattern: document.getElementById('branchPattern').value,
+        })
+      });
+      var data = await res.json();
+      if (data.ok && data.redirect) {
+        showMsg(msg, 'success', getText('first_run.success'));
+        setTimeout(function() { window.location.href = withLang(data.redirect); }, 600);
+      } else {
+        showMsg(msg, 'error', formatErrors(data));
+        setBtnLoading(btn, false);
+      }
+    } catch(e) {
+      showMsg(msg, 'error', getText('first_run.error') + ': ' + e.message);
+      setBtnLoading(btn, false);
+    }
+  };
+
+  /* ── Prepare Config (wizard) ── */
+  window.prepareConfig = async function() {
+    var btn = document.getElementById('btnPrepareConfig');
+    var msg = document.getElementById('msgWizard');
+    setBtnLoading(btn, true);
+    clearMsg(msg);
+    try {
+      var res = await fetch('/api/config/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          mode: 'empty',
+          release_name: monthNames[now.getMonth()] + ' ' + now.getFullYear() + ' Release',
+          target_month: now.getMonth() + 1,
+          target_year: now.getFullYear(),
+          branch_pattern: 'release/{YYYY}.{MM}',
+        })
+      });
+      var data = await res.json();
+      if (data.ok) {
+        showMsg(msg, 'success', getText('first_run.success'));
+        setTimeout(function() { window.location.href = withLang('/?open_wizard=1'); }, 600);
+      } else {
+        showMsg(msg, 'error', formatErrors(data));
+        setBtnLoading(btn, false);
+      }
+    } catch(e) {
+      showMsg(msg, 'error', getText('first_run.error') + ': ' + e.message);
+      setBtnLoading(btn, false);
+    }
+  };
+
+  /* ── Use example ── */
+  window.useExample = async function() {
+    if (!selectedExample) return;
+    var btn = document.getElementById('btnUseExample');
+    var msg = document.getElementById('msgExample');
+    setBtnLoading(btn, true);
+    clearMsg(msg);
+    try {
+      var res = await fetch('/api/config/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ mode: 'example', example: selectedExample })
+      });
+      var data = await res.json();
+      if (data.ok && data.redirect) {
+        showMsg(msg, 'success', getText('first_run.success'));
+        setTimeout(function() { window.location.href = withLang(data.redirect); }, 600);
+      } else {
+        showMsg(msg, 'error', formatErrors(data));
+        setBtnLoading(btn, false);
+      }
+    } catch(e) {
+      showMsg(msg, 'error', getText('first_run.error') + ': ' + e.message);
+      setBtnLoading(btn, false);
+    }
+  };
+
+  /* ── Import JSON ── */
+  window.importJson = async function() {
+    var btn = document.getElementById('btnImportJson');
+    var msg = document.getElementById('msgImport');
+    var raw = document.getElementById('importJson').value.trim();
+    clearMsg(msg);
+    var parsed;
+    try { parsed = JSON.parse(raw); }
+    catch(e) {
+      showMsg(msg, 'error', getText('first_run.invalid_json') + ': ' + e.message);
+      return;
+    }
+    setBtnLoading(btn, true);
+    try {
+      var res = await fetch('/api/config/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ mode: 'import', config: parsed })
+      });
+      var data = await res.json();
+      if (data.ok && data.redirect) {
+        showMsg(msg, 'success', getText('first_run.success'));
+        setTimeout(function() { window.location.href = withLang(data.redirect); }, 600);
+      } else {
+        showMsg(msg, 'error', formatErrors(data));
+        setBtnLoading(btn, false);
+      }
+    } catch(e) {
+      showMsg(msg, 'error', getText('first_run.error') + ': ' + e.message);
+      setBtnLoading(btn, false);
+    }
+  };
+
+  /* ── Helpers ── */
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function setBtnLoading(btn, loading) {
+    if (loading) {
+      btn.disabled = true;
+      btn.dataset.origText = btn.textContent;
+      btn.innerHTML = '<span class="fr-spinner"></span> ' + getText('first_run.creating');
+    } else {
+      btn.disabled = false;
+      btn.textContent = btn.dataset.origText || btn.textContent;
+    }
+  }
+
+  function showMsg(el, type, text) {
+    el.className = 'fr-message ' + type;
+    el.textContent = text;
+  }
+
+  function clearMsg(el) {
+    el.className = 'fr-message';
+    el.textContent = '';
+  }
+
+  function formatErrors(data) {
+    if (data.errors && Array.isArray(data.errors)) return data.errors.join('; ');
+    return data.error || getText('first_run.error');
+  }
+})();
+</script>
+</body>
+</html>

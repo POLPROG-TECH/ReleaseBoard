@@ -1,0 +1,202 @@
+<!-- ===== Header ===== -->
+<header class="header">
+  <div class="container header-inner">
+    <div class="brand" title="{{ vm.title }}">
+      <!-- Light theme full logo -->
+      <svg class="rb-logo rb-logo-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120" fill="none" role="img" aria-label="ReleaseBoard">
+        <defs><linearGradient id="hbg" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#fb6400"/><stop offset="100%" stop-color="#e55500"/></linearGradient><linearGradient id="hck" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#ffe0cc"/></linearGradient></defs>
+        <rect x="8" y="12" width="96" height="96" rx="20" fill="url(#hbg)"/>
+        <path d="M40 36 L40 64 Q40 76 52 76 L72 76" stroke="url(#hck)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <path d="M40 48 Q40 56 50 56 L62 56" stroke="url(#hck)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <circle cx="40" cy="36" r="5" fill="#fff"/><circle cx="72" cy="76" r="5" fill="#fff"/><circle cx="62" cy="56" r="5" fill="#fff"/>
+        <path d="M58 82 L66 90 L82 70" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.5"/>
+        <text x="120" y="56" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="38" font-weight="700" fill="#1a1a2e">Release</text>
+        <text x="270" y="56" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="38" font-weight="700" fill="#fb6400">Board</text>
+        <text x="120" y="82" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="14" font-weight="400" fill="#6b7280" letter-spacing="0.5">{{ _t('ui.app.tagline') if _t is defined else 'Release Readiness Intelligence' }}</text>
+      </svg>
+      <!-- Dark theme full logo -->
+      <svg class="rb-logo rb-logo-dark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120" fill="none" role="img" aria-label="ReleaseBoard">
+        <defs><linearGradient id="hbgd" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#fb6400"/><stop offset="100%" stop-color="#e55500"/></linearGradient><linearGradient id="hckd" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#ffe0cc"/></linearGradient></defs>
+        <rect x="8" y="12" width="96" height="96" rx="20" fill="url(#hbgd)"/>
+        <path d="M40 36 L40 64 Q40 76 52 76 L72 76" stroke="url(#hckd)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <path d="M40 48 Q40 56 50 56 L62 56" stroke="url(#hckd)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <circle cx="40" cy="36" r="5" fill="#fff"/><circle cx="72" cy="76" r="5" fill="#fff"/><circle cx="62" cy="56" r="5" fill="#fff"/>
+        <path d="M58 82 L66 90 L82 70" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.5"/>
+        <text x="120" y="56" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="38" font-weight="700" fill="#f0f0f5">Release</text>
+        <text x="270" y="56" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="38" font-weight="700" fill="#fb6400">Board</text>
+        <text x="120" y="82" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="14" font-weight="400" fill="#9ca3af" letter-spacing="0.5">{{ _t('ui.app.tagline') if _t is defined else 'Release Readiness Intelligence' }}</text>
+      </svg>
+      <!-- Midnight theme full logo (primary accent) -->
+      <svg class="rb-logo rb-logo-midnight" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120" fill="none" role="img" aria-label="ReleaseBoard">
+        <defs><linearGradient id="hbgm" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#2dd4bf"/><stop offset="100%" stop-color="#14b8a6"/></linearGradient><linearGradient id="hckm" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#ccfbf1"/></linearGradient></defs>
+        <rect x="8" y="12" width="96" height="96" rx="20" fill="url(#hbgm)"/>
+        <path d="M40 36 L40 64 Q40 76 52 76 L72 76" stroke="url(#hckm)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <path d="M40 48 Q40 56 50 56 L62 56" stroke="url(#hckm)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <circle cx="40" cy="36" r="5" fill="#fff"/><circle cx="72" cy="76" r="5" fill="#fff"/><circle cx="62" cy="56" r="5" fill="#fff"/>
+        <path d="M58 82 L66 90 L82 70" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.5"/>
+        <text x="120" y="56" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="38" font-weight="700" fill="#e8ecf4">Release</text>
+        <text x="270" y="56" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="38" font-weight="700" fill="#2dd4bf">Board</text>
+        <text x="120" y="82" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="14" font-weight="400" fill="#6b7f99" letter-spacing="0.5">{{ _t('ui.app.tagline') if _t is defined else 'Release Readiness Intelligence' }}</text>
+      </svg>
+    </div>
+    <div class="brand-info">
+      {% if vm.company %}<div class="brand-company" id="brandCompany">{{ vm.company }}</div>{% endif %}
+      {% if vm.subtitle %}<div class="brand-subtitle" id="brandSubtitle">{{ vm.subtitle }}</div>{% endif %}
+    </div>
+    <div class="header-controls">
+      <span class="release-badge">{{ vm.release_name }}</span>
+      {% if vm.interactive %}
+      <div id="qsTrigger" class="qs-trigger-wrap">
+        <button class="qs-trigger" onclick="qsToggle()" aria-label="Quick settings" data-i18n-title="ui.quick_settings.title">⚙</button>
+        <div class="qs-panel" onclick="event.stopPropagation()">
+          <!-- Language -->
+          <div class="qs-section">
+            <div class="qs-section-title" data-i18n="ui.quick_settings.language">Language</div>
+            <div class="qs-row">
+              <div class="qs-btn-group">
+                {% for loc in vm.supported_locales %}
+                <button class="qs-btn{% if vm.locale == loc.code %} active{% endif %}" data-qs-locale="{{ loc.code }}">{{ loc.name }}</button>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+          <!-- Theme -->
+          <div class="qs-section">
+            <div class="qs-section-title" data-i18n="ui.quick_settings.theme">Theme</div>
+            <div class="qs-row">
+              <div class="qs-btn-group">
+                <button class="qs-btn{% if vm.theme == 'light' %} active{% endif %}" data-qs-theme="light" data-i18n="ui.theme.light">Light</button>
+                <button class="qs-btn{% if vm.theme == 'system' %} active{% endif %}" data-qs-theme="system" data-i18n="ui.theme.auto">Auto</button>
+                <button class="qs-btn{% if vm.theme == 'dark' %} active{% endif %}" data-qs-theme="dark" data-i18n="ui.theme.dark">Dark</button>
+                <button class="qs-btn{% if vm.theme == 'midnight' %} active{% endif %}" data-qs-theme="midnight" data-i18n="ui.theme.midnight">Midnight</button>
+              </div>
+            </div>
+          </div>
+          <!-- Branding -->
+          <div class="qs-section">
+            <div class="qs-section-title" data-i18n="ui.config.branding">Branding</div>
+            <div class="qs-field">
+              <label class="qs-field-label" data-i18n="ui.config.dashboard_title">Dashboard Title</label>
+              <input class="qs-text-input" type="text" id="qsBrandTitle" value="{{ vm.title }}" spellcheck="false">
+            </div>
+            <div class="qs-field">
+              <label class="qs-field-label" data-i18n="ui.config.subtitle">Subtitle</label>
+              <input class="qs-text-input" type="text" id="qsBrandSubtitle" value="{{ vm.subtitle }}" spellcheck="false">
+            </div>
+            <div class="qs-field">
+              <label class="qs-field-label" data-i18n="ui.config.company">Company</label>
+              <input class="qs-text-input" type="text" id="qsBrandCompany" value="{{ vm.company }}" spellcheck="false">
+            </div>
+          </div>
+          <!-- Colors -->
+          <div class="qs-section">
+            <div class="qs-section-title" data-i18n="ui.quick_settings.colors">Colors</div>
+            <div class="qs-color-row">
+              <span class="qs-color-label" data-i18n="ui.config.primary_color">Primary</span>
+              <input class="qs-color-input" type="color" id="qsColor_primary" value="{{ vm.primary_color[:7] }}">
+              <input class="qs-hex-input" type="text" id="qsHex_primary" value="{{ vm.primary_color }}" maxlength="9" spellcheck="false">
+              <button class="qs-reset-btn" onclick="qsResetColor('primary')" data-i18n-title="ui.reset" title="Reset" aria-label="Reset">↺</button>
+            </div>
+            <div class="qs-color-row">
+              <span class="qs-color-label" data-i18n="ui.config.secondary_color">Secondary</span>
+              <input class="qs-color-input" type="color" id="qsColor_secondary" value="{{ vm.secondary_color[:7] }}">
+              <input class="qs-hex-input" type="text" id="qsHex_secondary" value="{{ vm.secondary_color }}" maxlength="9" spellcheck="false">
+              <button class="qs-reset-btn" onclick="qsResetColor('secondary')" data-i18n-title="ui.reset" title="Reset" aria-label="Reset">↺</button>
+            </div>
+            <div class="qs-color-row">
+              <span class="qs-color-label" data-i18n="ui.config.tertiary_color">Tertiary</span>
+              <input class="qs-color-input" type="color" id="qsColor_tertiary" value="{{ vm.tertiary_color[:7] }}">
+              <input class="qs-hex-input" type="text" id="qsHex_tertiary" value="{{ vm.tertiary_color }}" maxlength="9" spellcheck="false">
+              <button class="qs-reset-btn" onclick="qsResetColor('tertiary')" data-i18n-title="ui.reset" title="Reset" aria-label="Reset">↺</button>
+            </div>
+            <div class="qs-apply-row">
+              <button class="qs-apply-btn primary" onclick="qsSaveColors()" data-i18n="ui.quick_settings.apply">Apply</button>
+              <button class="qs-apply-btn secondary" onclick="qsResetAll()" data-i18n="ui.quick_settings.reset_colors">Reset Colors</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="theme-switcher icon-mr">
+        {% for loc in vm.supported_locales %}
+        <button class="theme-btn{% if vm.locale == loc.code %} active{% endif %}" data-locale="{{ loc.code }}" onclick="switchLocale('{{ loc.code }}')">{{ loc.name }}</button>
+        {% endfor %}
+      </div>
+      <div class="theme-switcher">
+        <button class="theme-btn{% if vm.theme == 'light' %} active{% endif %}" data-theme="light" data-i18n="ui.theme.light">Light</button>
+        <button class="theme-btn{% if vm.theme == 'system' %} active{% endif %}" data-theme="system" data-i18n="ui.theme.auto">Auto</button>
+        <button class="theme-btn{% if vm.theme == 'dark' %} active{% endif %}" data-theme="dark" data-i18n="ui.theme.dark">Dark</button>
+        <button class="theme-btn{% if vm.theme == 'midnight' %} active{% endif %}" data-theme="midnight" data-i18n="ui.theme.midnight">Midnight</button>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</header>
+
+{% if vm.interactive %}
+<!-- ===== Toolbar (interactive only) ===== -->
+<nav class="toolbar" id="toolbar" aria-label="Actions">
+  <div class="container">
+    <button class="tb-btn primary" id="btnAnalyze" onclick="RB.startAnalysis()" data-i18n="ui.analyze">▶ Analyze</button>
+    <button class="tb-btn hidden" id="btnStop" onclick="RB.stopAnalysis()" data-i18n="ui.stop">Stop</button>
+    <button class="tb-btn" id="btnConfig" onclick="RB.toggleDrawer()" data-i18n="ui.configuration">Configuration</button>
+    <div class="tb-sep"></div>
+    <!-- Export / Import dropdown -->
+    <div class="tb-dropdown">
+      <button class="tb-btn" onclick="tbToggleDropdown(this.parentElement)"><span data-i18n="ui.tb.data">Data</span> <span class="tb-caret">▾</span></button>
+      <div class="tb-dropdown-menu">
+        <div class="tb-dropdown-label" data-i18n="ui.tb.setup">Setup</div>
+        <button class="tb-dropdown-item" onclick="RB.openWizard();this.closest('.tb-dropdown').classList.remove('open')">🧙 <span data-i18n="ui.wizard.title">Wizard</span></button>
+        <button class="tb-dropdown-item" onclick="RB.openConfigImport();this.closest('.tb-dropdown').classList.remove('open')">📥 <span data-i18n="ui.import_config">Import Config</span></button>
+        <div class="tb-dropdown-sep"></div>
+        <div class="tb-dropdown-label" data-i18n="ui.tb.export">Export</div>
+        <button class="tb-dropdown-item" onclick="RB.exportConfig();this.closest('.tb-dropdown').classList.remove('open')">💾 <span data-i18n="ui.export_config">Export Config</span></button>
+        <button class="tb-dropdown-item" onclick="RB.exportHTML();this.closest('.tb-dropdown').classList.remove('open')">📊 <span data-i18n="ui.export_html">Export HTML</span></button>
+        <button class="tb-dropdown-item" onclick="RB.openTagExport();this.closest('.tb-dropdown').classList.remove('open')">🏷️ <span data-i18n="ui.tag_export.menu_item">Export Tags (YAML)</span></button>
+      </div>
+    </div>
+    <!-- Release Calendar dropdown -->
+    <div class="tb-dropdown">
+      <button class="tb-btn" onclick="tbToggleDropdown(this.parentElement)"><span data-i18n="rc.toolbar.calendar">Calendar</span> <span class="tb-caret">▾</span></button>
+      <div class="tb-dropdown-menu">
+        <div class="tb-dropdown-label" data-i18n="ui.tb.plan">Plan</div>
+        <button class="tb-dropdown-item" id="btnReleaseCalendar" onclick="RC.openWizard();this.closest('.tb-dropdown').classList.remove('open')">📅 <span data-i18n="rc.toolbar.plan_calendar">Plan Calendar</span></button>
+        <div class="tb-dropdown-sep"></div>
+        <div class="tb-dropdown-label" data-i18n="ui.tb.view_import">View & Import</div>
+        <button class="tb-dropdown-item" id="btnViewCalendar" onclick="RC.openPreview();this.closest('.tb-dropdown').classList.remove('open')">👁️ <span data-i18n="rc.toolbar.view_calendar">View Calendar</span></button>
+        <button class="tb-dropdown-item" id="btnImportCalendar" onclick="RC.openImport();this.closest('.tb-dropdown').classList.remove('open')">📥 <span data-i18n="rc.toolbar.import_calendar">Import Calendar</span></button>
+        <div class="tb-dropdown-sep hidden" id="rcEditSep"></div>
+        <div class="tb-dropdown-label hidden" id="rcManageLabel" data-i18n="ui.tb.manage">Manage</div>
+        <button class="tb-dropdown-item hidden" id="btnEditCalendar" onclick="RC.editCalendar();this.closest('.tb-dropdown').classList.remove('open')">✏️ <span data-i18n="rc.toolbar.edit_calendar">Edit Calendar</span></button>
+        <button class="tb-dropdown-item hidden" id="btnDeleteCalendar" onclick="RC.deleteCalendar();this.closest('.tb-dropdown').classList.remove('open')">🗑️ <span data-i18n="rc.delete.title">Delete Calendar</span></button>
+      </div>
+    </div>
+    <div class="tb-status" id="tbStatus">
+      <span class="tb-dot gray" id="tbDot"></span>
+      <span id="tbStatusText" data-i18n="ui.status.ready">Ready</span>
+      <span class="unsaved-badge hidden" id="unsavedBadge" data-i18n="ui.unsaved_changes">Unsaved changes</span>
+      <span class="preview-badge hidden" id="previewBadge">
+        <span data-i18n="ui.config_import.preview_mode">Preview mode</span>
+        <button class="preview-discard-btn" onclick="RB.discardConfigPreview()" data-i18n="ui.config_import.discard_preview">Discard</button>
+      </span>
+    </div>
+  </div>
+</nav>
+
+<!-- ===== Analysis Status Bar ===== -->
+<div class="analysis-bar hidden" id="analysisBar" role="status" aria-live="polite">
+  <div class="container">
+    <div class="analysis-bar-inner">
+      <div class="analysis-info">
+        <span class="analysis-phase" id="analysisPhase" data-i18n="ui.status.idle">Idle</span>
+        <span class="analysis-detail" id="analysisDetail"></span>
+      </div>
+      <div class="analysis-progress-track">
+        <div class="analysis-progress-fill" id="analysisProgressFill" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width:0%"></div>
+      </div>
+      <span class="analysis-detail" id="analysisCount">0/0</span>
+    </div>
+    <div class="analysis-repo-list" id="analysisRepoList"></div>
+  </div>
+</div>
+{% endif %}

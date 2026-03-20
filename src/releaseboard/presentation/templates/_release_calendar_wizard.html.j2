@@ -1,0 +1,228 @@
+<!-- ===== Release Calendar Wizard ===== -->
+<div class="rc-wizard-overlay" id="rcWizardOverlay" onclick="if(event.target===this&&typeof RC!=='undefined')RC.closeWizard()">
+  <div class="rc-wizard-panel" role="dialog" aria-labelledby="rcWizardTitle" aria-modal="true">
+    <!-- Header -->
+    <div class="rc-wizard-header">
+      <h2 id="rcWizardTitle">📅 <span data-i18n="rc.wizard.title">Release Calendar</span></h2>
+      <button class="rc-wizard-close" onclick="RC.closeWizard()" aria-label="Close" data-i18n-aria-label="ui.aria.close_modal">&times;</button>
+    </div>
+
+    <!-- Step Tabs -->
+    <div class="rc-wizard-steps" role="tablist">
+      <div class="rc-wizard-step-tab active" data-step="0" role="tab" aria-selected="true">
+        <span class="rc-step-num">1</span><span data-i18n="rc.step.setup">Setup</span>
+      </div>
+      <div class="rc-wizard-step-tab" data-step="1" role="tab" aria-selected="false">
+        <span class="rc-step-num">2</span><span data-i18n="rc.step.events">Events</span>
+      </div>
+      <div class="rc-wizard-step-tab" data-step="2" role="tab" aria-selected="false">
+        <span class="rc-step-num">3</span><span data-i18n="rc.step.schedule">Schedule</span>
+      </div>
+      <div class="rc-wizard-step-tab" data-step="3" role="tab" aria-selected="false">
+        <span class="rc-step-num">4</span><span data-i18n="rc.step.preview">Preview</span>
+      </div>
+      <div class="rc-wizard-step-tab" data-step="4" role="tab" aria-selected="false">
+        <span class="rc-step-num">5</span><span data-i18n="rc.step.export">Export</span>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="rc-wizard-body">
+      <!-- ===== Step 0: Setup ===== -->
+      <div class="rc-step active" id="rcStep0">
+        <div class="rc-validation-msg error" id="rcStep0Error"></div>
+
+        <div class="rc-form-group">
+          <label for="rcCalendarName"><span data-i18n="rc.field.calendar_name">Calendar Name</span><span class="required-star">*</span></label>
+          <input type="text" class="rc-input" id="rcCalendarName" maxlength="100"
+                 data-i18n-placeholder="rc.field.calendar_name_placeholder" placeholder="e.g. Q2 2026 Release Plan"
+                 aria-describedby="rcCalendarNameError"
+                 oninput="if(typeof RC!=='undefined'&&RC._validateSetupLive)RC._validateSetupLive()">
+          <div class="rc-field-error" id="rcCalendarNameError"></div>
+        </div>
+
+        <div class="rc-row">
+          <div class="rc-form-group">
+            <label for="rcYear"><span data-i18n="rc.field.year">Year</span><span class="required-star">*</span></label>
+            <select class="rc-select" id="rcYear"></select>
+          </div>
+          <div class="rc-form-group">
+            <label data-i18n="rc.field.notes">Notes</label>
+            <input type="text" class="rc-input" id="rcCalendarNotes" maxlength="200"
+                   data-i18n-placeholder="rc.field.notes_placeholder" placeholder="Optional notes...">
+          </div>
+        </div>
+
+        <div class="rc-form-group">
+          <label><span data-i18n="rc.field.select_months">Select Months</span><span class="required-star">*</span></label>
+          <div class="rc-hint" data-i18n="rc.hint.select_months">Click to select individual months or click-drag to select a range.</div>
+          <div class="rc-month-grid" id="rcMonthGrid"></div>
+          <div class="rc-field-error" id="rcMonthGridError"></div>
+        </div>
+
+        <div class="rc-form-group mt-16">
+          <label data-i18n="rc.field.display_options">Display Options</label>
+          <div class="rc-checkbox-group">
+            <label class="rc-checkbox-label">
+              <input type="checkbox" id="rcShowWeekdays" checked> <span data-i18n="rc.option.show_weekdays">Show weekday names</span>
+            </label>
+            <label class="rc-checkbox-label">
+              <input type="checkbox" id="rcShowNotes" checked> <span data-i18n="rc.option.show_notes">Show notes column</span>
+            </label>
+            <label class="rc-checkbox-label">
+              <input type="checkbox" id="rcShowQuarters" checked> <span data-i18n="rc.option.show_quarters">Group by quarters</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Step 1: Events (arbitrary release dates) ===== -->
+      <div class="rc-step" id="rcStep1">
+        <div class="rc-validation-msg error" id="rcStep1Error"></div>
+        <p class="rc-hint-text" data-i18n="rc.hint.events">Add release events with arbitrary dates. Each event has a date, environment phase, and optional label.</p>
+        <div id="rcEventsContainer"></div>
+        <button class="rc-btn mt-12" onclick="RC.addEvent()" data-i18n="rc.event.add">+ Add Event</button>
+      </div>
+
+      <!-- ===== Step 2: Schedule (monthly grid) ===== -->
+      <div class="rc-step" id="rcStep2">
+        <div class="rc-validation-msg error" id="rcStep2Error"></div>
+        <div class="rc-validation-msg warning" id="rcStep2Warning"></div>
+        <p class="rc-hint-text" data-i18n="rc.hint.schedule">Enter deployment dates for each milestone. Dates should follow logical order across freeze, SIT, UAT, and PROD phases.</p>
+        <div class="rc-scroll-container" id="rcScheduleScroll">
+          <table class="rc-schedule-table" id="rcScheduleTable">
+            <thead id="rcScheduleHead"></thead>
+            <tbody id="rcScheduleBody"></tbody>
+          </table>
+          <div class="rc-scroll-hint"></div>
+        </div>
+      </div>
+
+      <!-- ===== Step 3: Preview ===== -->
+      <div class="rc-step" id="rcStep3">
+        <div class="rc-validation-msg success" id="rcStep3Info"></div>
+        <div class="rc-preview-wrapper" id="rcPreviewWrapper"></div>
+        <div class="rc-timeline" id="rcTimeline"></div>
+      </div>
+
+      <!-- ===== Step 4: Export ===== -->
+      <div class="rc-step" id="rcStep4">
+        <div class="rc-validation-msg success hidden" id="rcStep4Status"></div>
+
+        <div class="rc-export-actions">
+          <button class="rc-export-btn" onclick="RC.copyConfluenceHTML()">
+            <span class="rc-export-icon">📋</span>
+            <span>
+              <span data-i18n="rc.export.copy_html">Copy HTML for Confluence</span><br>
+              <small class="rc-hint-small" data-i18n="rc.export.copy_html_hint">Paste directly into Confluence page</small>
+            </span>
+          </button>
+          <button class="rc-export-btn" onclick="RC.copyConfluenceWiki()">
+            <span class="rc-export-icon">📝</span>
+            <span>
+              <span data-i18n="rc.export.copy_wiki">Copy Wiki Markup</span><br>
+              <small class="rc-hint-small" data-i18n="rc.export.copy_wiki_hint">For Confluence Server / Data Center</small>
+            </span>
+          </button>
+          <button class="rc-export-btn" onclick="RC.downloadHTML()">
+            <span class="rc-export-icon">⤓</span>
+            <span>
+              <span data-i18n="rc.export.download_html">Download HTML</span><br>
+              <small class="rc-hint-small" data-i18n="rc.export.download_html_hint">Standalone HTML file</small>
+            </span>
+          </button>
+          <button class="rc-export-btn" onclick="RC.saveToConfig()">
+            <span class="rc-export-icon">💾</span>
+            <span>
+              <span data-i18n="rc.export.save_config">Save to Configuration</span><br>
+              <small class="rc-hint-small" data-i18n="rc.export.save_config_hint">Persist calendar in releaseboard.json</small>
+            </span>
+          </button>
+        </div>
+
+        <h3 class="rc-section-heading" data-i18n="rc.export.preview_label">Final Preview</h3>
+        <div class="rc-preview-wrapper" id="rcExportPreview"></div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="rc-wizard-footer" id="rcWizardFooter">
+      <div class="spacer">
+        <button class="rc-btn btn-danger" id="rcBtnDiscard" onclick="RC.closeWizard()" data-i18n="ui.config.discard_close">Discard & Close</button>
+      </div>
+      <button class="rc-btn" id="rcBtnPrev" onclick="RC.prevStep()" data-i18n="rc.btn.back">Back</button>
+      <button class="rc-btn primary" id="rcBtnNext" onclick="RC.nextStep()" data-i18n="rc.btn.next">Next</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Release Calendar Preview Modal ===== -->
+<div class="rc-wizard-overlay" id="rcPreviewOverlay" onclick="if(event.target===this)RC.closePreview()">
+  <div class="rc-wizard-panel" role="dialog" aria-labelledby="rcPreviewTitle" aria-modal="true">
+    <div class="rc-wizard-header">
+      <h2 id="rcPreviewTitle">👁 <span data-i18n="rc.view.title">Release Calendar</span></h2>
+      <button class="rc-wizard-close" onclick="RC.closePreview()" aria-label="Close" data-i18n-aria-label="ui.aria.close_modal">&times;</button>
+    </div>
+    <div class="rc-wizard-body modal-body-padded">
+      <div id="rcPreviewContent"></div>
+    </div>
+    <div class="rc-wizard-footer">
+      <div></div>
+      <button class="rc-btn" onclick="RC.closePreview()" data-i18n="rc.btn.done">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Release Calendar Import Modal ===== -->
+<div class="rc-wizard-overlay" id="rcImportOverlay" onclick="if(event.target===this)RC.closeImport()">
+  <div class="rc-wizard-panel modal-narrow" role="dialog" aria-labelledby="rcImportTitle" aria-modal="true">
+    <div class="rc-wizard-header">
+      <h2 id="rcImportTitle">📥 <span data-i18n="rc.import.title">Import Release Calendar</span></h2>
+      <button class="rc-wizard-close" onclick="RC.closeImport()" aria-label="Close" data-i18n-aria-label="ui.aria.close_modal">&times;</button>
+    </div>
+    <div class="rc-wizard-body modal-body-padded">
+      <p class="wiz-import-desc" data-i18n="rc.import.description">Import a release calendar from a JSON file. Only JSON format is supported.</p>
+
+      <div class="rc-import-notice wiz-notice-box">
+        <strong>⚠️ <span data-i18n="rc.import.json_only">Only JSON files are accepted.</span></strong>
+        <span class="text-tertiary"> The data must match the expected schema. Validation errors will be shown if the file is invalid.</span>
+      </div>
+
+      <!-- File Drop Zone -->
+      <div class="rc-import-dropzone" id="rcImportDropzone" onclick="document.getElementById('rcImportFileInput').click()">
+        <div class="rc-dropzone-icon">📁</div>
+        <div data-i18n="rc.import.drop_or_browse">Drop a JSON file here or click to browse</div>
+        <input type="file" id="rcImportFileInput" accept=".json" class="hidden" onchange="RC.handleImportFile(event)">
+      </div>
+
+      <!-- Validation Status -->
+      <div id="rcImportStatus" style="display:none;"></div>
+
+      <!-- Schema & Example Reference (collapsible) -->
+      <div class="rc-import-schema-section wiz-collapsible-section rc-btn-group">
+        <button class="rc-btn btn-sm" onclick="RC.toggleImportSchema()" id="rcSchemaToggle" data-i18n="rc.import.show_schema">Show expected JSON format</button>
+        <button class="rc-btn btn-sm" onclick="RC.toggleImportExample()" id="rcExampleToggle" data-i18n="rc.import.show_example">Show example</button>
+      </div>
+      <div id="rcSchemaContent" style="display:none;" class="mt-12">
+        <h4 class="wiz-section-heading" data-i18n="rc.import.schema_title">Expected JSON Schema</h4>
+        <p class="wiz-schema-hint" data-i18n="rc.import.schema_hint">Your JSON file must follow this structure. Required fields are marked.</p>
+        <div id="rcSchemaDisplay" class="rc-import-code"></div>
+      </div>
+      <div id="rcExampleContent" style="display:none;" class="mt-12">
+        <h4 class="wiz-section-heading" data-i18n="rc.import.example_title">Example JSON</h4>
+        <div id="rcExampleDisplay" class="rc-import-code"></div>
+      </div>
+
+      <!-- Confirm replace dialog (hidden by default) -->
+      <div id="rcImportConfirm" style="display:none;" class="wiz-collapsible-section">
+        <div class="rc-validation-msg warning rc-validation-msg-block">
+          <strong data-i18n="rc.import.confirm_replace">A release calendar already exists. Do you want to replace it?</strong>
+          <div class="rc-btn-group mt-12">
+            <button class="rc-btn primary" onclick="RC.confirmImportReplace()" data-i18n="rc.import.replace">Replace</button>
+            <button class="rc-btn" onclick="RC.cancelImportReplace()" data-i18n="rc.import.cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

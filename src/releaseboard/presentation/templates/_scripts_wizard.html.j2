@@ -1,0 +1,515 @@
+  /* ============================================================
+   *  CONFIG WIZARD — Guided configuration preparation
+   * ============================================================ */
+  const WIZ = {
+    step: 0,
+    layers: [],
+    provider: 'github',
+    discovered: null,   // API response
+    warnings: [],
+  };
+
+  const WIZ_COLORS = ['#7C5CFC','#0EA47A','#E08C00','#E0544E','#A855F7','#2B8DE6'];
+  const WIZ_DEFAULTS = [
+    { id: 'ui',  label: 'UI',  color: '#7C5CFC', root_url: '' },
+    { id: 'api', label: 'API', color: '#0EA47A', root_url: '' },
+    { id: 'db',  label: 'DB',  color: '#E08C00', root_url: '' },
+  ];
+
+  function openWizard() {
+    WIZ.step = 0;
+    WIZ.layers = WIZ_DEFAULTS.map(l => ({...l}));
+    WIZ.provider = 'github';
+    WIZ.discovered = null;
+    WIZ.warnings = [];
+    wizSetProvider('github');
+    wizRenderLayers();
+    wizGoStep(0);
+    document.getElementById('wizardOverlay').classList.add('open');
+    // B1: Focus trap
+    if(typeof trapFocus==='function'){setTimeout(function(){window._wizFocusTrap=trapFocus(document.getElementById('wizardOverlay'))},100);}
+  }
+  function closeWizard() {
+    document.getElementById('wizardOverlay').classList.remove('open');
+    if(window._wizFocusTrap){window._wizFocusTrap();window._wizFocusTrap=null;}
+  }
+
+  /* ---------- Step navigation ---------- */
+  function wizGoStep(n) {
+    WIZ.step = n;
+    document.querySelectorAll('.wizard-step-tab').forEach((t, i) => {
+      t.classList.toggle('active', i === n);
+      t.classList.toggle('done', i < n);
+      t.setAttribute('aria-selected', i === n ? 'true' : 'false');
+      t.setAttribute('tabindex', i === n ? '0' : '-1');
+    });
+    document.querySelectorAll('.wizard-step-content').forEach((c, i) => {
+      c.classList.toggle('active', i === n);
+    });
+    const prev = document.getElementById('wizBtnPrev');
+    const next = document.getElementById('wizBtnNext');
+    const footer = document.getElementById('wizardFooter');
+    if (n > 0) { prev.classList.remove('hidden'); prev.style.display = ''; } else { prev.style.display = 'none'; }
+    // Hide footer buttons on step 3 (confirm has its own actions)
+    if (n === 3) {
+      footer.style.display = 'none';
+    } else {
+      footer.style.display = '';
+      next.textContent = n === 2 ? _t('ui.wizard.confirm_btn') : _t('ui.wizard.next_btn');
+      if (n === 0) wizValidateStep0();
+      else next.disabled = false;
+    }
+  }
+  /* B3: Arrow key navigation for wizard step tabs */
+  (function(){
+    var wizSteps = document.getElementById('wizardSteps');
+    if (wizSteps) {
+      wizSteps.addEventListener('keydown', function(e) {
+        var tabs = Array.from(this.querySelectorAll('[role="tab"]'));
+        var idx = tabs.indexOf(document.activeElement);
+        if (idx < 0) return;
+        var target = null;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          target = tabs[(idx + 1) % tabs.length];
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          target = tabs[(idx - 1 + tabs.length) % tabs.length];
+        } else if (e.key === 'Home') {
+          target = tabs[0];
+        } else if (e.key === 'End') {
+          target = tabs[tabs.length - 1];
+        }
+        if (target) { e.preventDefault(); target.focus(); target.click(); }
+      });
+    }
+  })();
+  function markWizField(inp, msg) {
+    inp.classList.add('has-error');
+    if (!inp.parentElement.querySelector('.wiz-field-error')) {
+      const d = document.createElement('div'); d.className = 'wiz-field-error'; d.textContent = msg;
+      inp.insertAdjacentElement('afterend', d);
+    }
+    inp.addEventListener('input', function onFix() {
+      this.classList.remove('has-error');
+      const fe = this.parentElement.querySelector('.wiz-field-error'); if (fe) fe.remove();
+      this.removeEventListener('input', onFix);
+    });
+  }
+  function wizValidateStep0() {
+    var next = document.getElementById('wizBtnNext');
+    if (!next || WIZ.step !== 0) return;
+    var urlRe = /^https?:\/\/[^\s/]+\/[^\s/]+/;
+    // Clear previous inline URL errors
+    document.querySelectorAll('#wizLayerList .wlc-url-row .wiz-field-error').forEach(function(el){ el.remove(); });
+    document.querySelectorAll('#wizLayerList .wlc-url-row input.has-error').forEach(function(el){ el.classList.remove('has-error'); });
+    var hasValidUrl = false;
+    var hasInvalidUrl = false;
+    document.querySelectorAll('#wizLayerList .wlc-url-row input').forEach(function(inp, i) {
+      var u = (WIZ.layers[i] && WIZ.layers[i].root_url || '').trim();
+      if (u) {
+        if (urlRe.test(u)) {
+          hasValidUrl = true;
+        } else {
+          hasInvalidUrl = true;
+          inp.classList.add('has-error');
+          var d = document.createElement('div'); d.className = 'wiz-field-error';
+          d.textContent = _t('ui.wizard.invalid_url_format') !== 'ui.wizard.invalid_url_format' ? _t('ui.wizard.invalid_url_format') : 'URL must start with https:// followed by host/organization';
+          inp.insertAdjacentElement('afterend', d);
+        }
+      }
+    });
+    next.disabled = !hasValidUrl || hasInvalidUrl;
+  }
+  function wizNext() {
+    if (WIZ.step === 0) {
+      // Clear previous validation state
+      hideInlineError('wizStep0Error');
+      document.querySelectorAll('#wizStep0 .wiz-field-error').forEach(el => el.remove());
+      document.querySelectorAll('#wizStep0 input.has-error').forEach(el => el.classList.remove('has-error'));
+
+      // Validate token format if provided
+      const tokenInput = document.getElementById('wizProviderToken');
+      if (tokenInput && tokenInput.value.trim()) {
+        const val = tokenInput.value.trim();
+        const isGH = WIZ.provider === 'github';
+        const validFormat = isGH ? /^(ghp_|github_pat_)/i.test(val) : /^(glpat-)/i.test(val);
+        if (!validFormat) {
+          tokenInput.classList.add('has-error');
+          const errDiv = document.createElement('div');
+          errDiv.className = 'wiz-field-error';
+          errDiv.textContent = isGH
+            ? (_t('ui.wizard.invalid_github_token') !== 'ui.wizard.invalid_github_token' ? _t('ui.wizard.invalid_github_token') : 'Token should start with ghp_ or github_pat_')
+            : (_t('ui.wizard.invalid_gitlab_token') !== 'ui.wizard.invalid_gitlab_token' ? _t('ui.wizard.invalid_gitlab_token') : 'Token should start with glpat-');
+          tokenInput.insertAdjacentElement('afterend', errDiv);
+          tokenInput.focus();
+          return;
+        }
+      }
+
+      // Validate layers have at least one URL
+      const hasUrl = WIZ.layers.some(l => l.root_url.trim());
+      if (!hasUrl) {
+        // Highlight all empty URL inputs inline
+        document.querySelectorAll('#wizLayerList .wlc-url-row input').forEach((inp, i) => {
+          if (!WIZ.layers[i] || !WIZ.layers[i].root_url.trim()) {
+            markWizField(inp, _t('ui.wizard.url_required') !== 'ui.wizard.url_required' ? _t('ui.wizard.url_required') : 'Organization URL is required.');
+          }
+        });
+        const firstErr = document.querySelector('#wizLayerList .wlc-url-row input.has-error');
+        if (firstErr) firstErr.focus();
+        return;
+      }
+      // Validate URL format for each filled URL
+      const urlRe = /^https?:\/\/[^\s/]+\/[^\s/]+/;
+      let urlInvalid = false;
+      document.querySelectorAll('#wizLayerList .wlc-url-row input').forEach((inp, i) => {
+        const u = (WIZ.layers[i] && WIZ.layers[i].root_url || '').trim();
+        if (u && !urlRe.test(u)) {
+          markWizField(inp, _t('ui.wizard.invalid_url_format') !== 'ui.wizard.invalid_url_format' ? _t('ui.wizard.invalid_url_format') : 'URL must start with https:// followed by host/organization');
+          urlInvalid = true;
+        }
+      });
+      if (urlInvalid) { const f = document.querySelector('#wizLayerList .wlc-url-row input.has-error'); if (f) f.focus(); return; }
+      wizGoStep(1);
+      wizStartScan();
+    } else if (WIZ.step === 1) {
+      // Move to review (already scanned)
+      wizRenderReview();
+      wizGoStep(2);
+    } else if (WIZ.step === 2) {
+      // Move to confirm
+      wizRenderConfirm();
+      wizGoStep(3);
+    }
+  }
+  function wizPrev() {
+    if (WIZ.step === 1) { wizGoStep(0); }
+    else if (WIZ.step === 2) { wizGoStep(0); }
+    else if (WIZ.step === 3) { wizGoStep(2); }
+  }
+
+  /* ---------- Step 1: Layer editor ---------- */
+  function wizRenderLayers() {
+    const list = document.getElementById('wizLayerList');
+    const isGL = WIZ.provider === 'gitlab';
+    const urlLabel = isGL ? _t('ui.wizard.gitlab_url_label') : _t('ui.wizard.github_url_label');
+    const urlPlaceholder = isGL ? 'https://gitlab.com/group-name' : 'https://github.com/organization';
+    list.innerHTML = WIZ.layers.map((l, i) => `
+      <div class="wiz-layer-card">
+        <div class="wlc-head">
+          <span class="wlc-badge"><span class="wlc-color" style="background:${esc(l.color)}"></span>${esc(l.label)}</span>
+          <button class="wlc-remove" onclick="RB.wizRemoveLayer(${i})" title="${esc(_t('ui.wizard.remove'))}">\u00d7</button>
+        </div>
+        <div class="wlc-fields">
+          <div class="wiz-layer-flex-row">
+            <div class="spacer">
+              <label>ID</label>
+              <input type="text" value="${esc(l.id)}" onchange="RB.wizUpdateLayer(${i},'id',this.value)">
+            </div>
+            <div class="spacer">
+              <label>${esc(_t('ui.wizard.name_label'))}</label>
+              <input type="text" value="${esc(l.label)}" onchange="RB.wizUpdateLayer(${i},'label',this.value)">
+            </div>
+            <div class="cfg-flex-auto">
+              <label>${esc(_t('ui.wizard.color_label'))}</label>
+              <input type="color" value="${esc(l.color)}" onchange="RB.wizUpdateLayer(${i},'color',this.value)" class="cfg-color">
+            </div>
+          </div>
+          <div class="wlc-url-row">
+            <label>${urlLabel}<span class="required-star">*</span></label>
+            <input type="text" value="${esc(l.root_url)}" placeholder="${urlPlaceholder}"
+                   oninput="RB.wizUpdateLayer(${i},'root_url',this.value);RB.wizValidateStep0()"
+                   onchange="RB.wizUpdateLayer(${i},'root_url',this.value)">
+          </div>
+        </div>
+      </div>
+    `).join('');
+    wizValidateStep0();
+  }
+  function wizUpdateLayer(i, key, val) {
+    if (WIZ.layers[i]) WIZ.layers[i][key] = val;
+    if (key === 'label' || key === 'color') wizRenderLayers();
+    if (key === 'root_url') wizValidateStep0();
+  }
+  function wizRemoveLayer(i) {
+    WIZ.layers.splice(i, 1);
+    wizRenderLayers();
+  }
+  function wizAddLayer() {
+    const idx = WIZ.layers.length;
+    WIZ.layers.push({
+      id: 'layer' + (idx + 1),
+      label: 'Layer ' + (idx + 1),
+      color: WIZ_COLORS[idx % WIZ_COLORS.length],
+      root_url: '',
+    });
+    wizRenderLayers();
+  }
+
+  /* ---------- Provider switcher ---------- */
+  function wizSetProvider(p) {
+    WIZ.provider = p;
+    document.getElementById('wizProvGithub').classList.toggle('active', p === 'github');
+    document.getElementById('wizProvGitlab').classList.toggle('active', p === 'gitlab');
+    const tokenInput = document.getElementById('wizProviderToken');
+    const tokenLabel = document.getElementById('wizTokenLabel');
+    const tokenHelp = document.getElementById('wizTokenHelp');
+    const desc = document.getElementById('wizProviderDesc');
+    tokenInput.value = '';
+    if (p === 'gitlab') {
+      desc.innerHTML = _t('ui.wizard.gitlab_desc');
+      tokenLabel.innerHTML = 'GitLab Token <span class="wiz-token-optional">(' + _t('ui.wizard.token_optional_private') + ')</span>';
+      tokenInput.placeholder = 'glpat-xxxxxxxxxxxxxxxxxxxx';
+      tokenHelp.innerHTML = _t('ui.wizard.gitlab_token_help');
+    } else {
+      desc.innerHTML = _t('ui.wizard.github_desc');
+      tokenLabel.innerHTML = 'GitHub Token <span class="wiz-token-optional">(' + _t('ui.wizard.token_optional_rate') + ')</span>';
+      tokenInput.placeholder = 'ghp_xxxxxxxxxxxxxxxxxxxx';
+      tokenHelp.innerHTML = _t('ui.wizard.github_token_help');
+    }
+    wizRenderLayers();
+  }
+
+  /* ---------- Step 2: Scanning ---------- */
+  async function wizStartScan() {
+    const area = document.getElementById('wizScanArea');
+    const nextBtn = document.getElementById('wizBtnNext');
+    nextBtn.disabled = true;
+    const provLabel = WIZ.provider === 'gitlab' ? 'GitLab' : 'GitHub';
+    document.getElementById('wizScanDesc').textContent = _t('ui.wizard.scanning_desc', {provider: provLabel});
+
+    // Render scanning state per layer
+    area.innerHTML = WIZ.layers.filter(l => l.root_url.trim()).map(l => `
+      <div class="wiz-scan-layer" id="wizScan_${esc(l.id)}">
+        <div class="wsl-head">
+          <span class="wlc-color" style="background:${esc(l.color)};width:10px;height:10px;border-radius:50%;display:inline-block;"></span>
+          ${esc(l.label)}
+          <span class="wiz-scanning-dot" id="wizDot_${esc(l.id)}"></span>
+        </div>
+        <div class="wsl-status" id="wizStat_${esc(l.id)}">${esc(_t('ui.wizard.waiting'))}</div>
+        <div class="wsl-bar"><div class="wsl-bar-fill" id="wizBar_${esc(l.id)}" style="width:0%"></div></div>
+      </div>
+    `).join('');
+
+    // Start scanning — set all to "in progress"
+    WIZ.layers.filter(l => l.root_url.trim()).forEach(l => {
+      const stat = document.getElementById('wizStat_' + l.id);
+      if (stat) stat.textContent = _t('ui.wizard.scanning');
+      const bar = document.getElementById('wizBar_' + l.id);
+      if (bar) bar.style.width = '30%';
+    });
+
+    try {
+      const resp = await fetch('/api/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          layers: WIZ.layers.filter(l => l.root_url.trim()),
+          branch_pattern: draft.branch_pattern || 'release/{YYYY}.{MM}',
+          provider: WIZ.provider,
+          github_token: WIZ.provider === 'github' ? (document.getElementById('wizProviderToken') || {}).value || '' : '',
+          gitlab_token: WIZ.provider === 'gitlab' ? (document.getElementById('wizProviderToken') || {}).value || '' : '',
+        }),
+      });
+      const data = await resp.json();
+      WIZ.discovered = data;
+      WIZ.warnings = data.warnings || [];
+
+      // Update scanning UI
+      (data.layers || []).forEach(layer => {
+        const stat = document.getElementById('wizStat_' + layer.id);
+        const bar = document.getElementById('wizBar_' + layer.id);
+        const dot = document.getElementById('wizDot_' + layer.id);
+        if (stat) stat.textContent = _t('ui.wizard.found_repos', {count: (layer.repos||[]).length});
+        if (bar) bar.style.width = '100%';
+        if (dot) { dot.style.animation = 'none'; dot.style.background = 'var(--success)'; }
+      });
+
+      // Show warnings if any
+      if (WIZ.warnings.length) {
+        area.insertAdjacentHTML('beforeend', `
+          <div class="wiz-warnings">
+            <strong>\u26a0 ${esc(_t('ui.wizard.warnings'))}:</strong>
+            <ul>${WIZ.warnings.map(w => '<li>' + esc(w) + '</li>').join('')}</ul>
+          </div>
+        `);
+      }
+
+      nextBtn.disabled = false;
+      nextBtn.textContent = _t('ui.wizard.next_btn');
+    } catch (err) {
+      area.insertAdjacentHTML('beforeend', `
+        <div class="wiz-warnings">
+          <strong>${esc(_t('ui.wizard.scan_error'))}:</strong> ${esc(err.message)}
+        </div>
+      `);
+      nextBtn.disabled = false;
+    }
+  }
+
+  /* ---------- Step 3: Review ---------- */
+  function wizRenderReview() {
+    if (!WIZ.discovered) return;
+    const layers = WIZ.discovered.layers || [];
+
+    // Summary stats
+    const totalRepos = layers.reduce((s, l) => s + (l.repos||[]).length, 0);
+    const summaryEl = document.getElementById('wizReviewSummary');
+    summaryEl.innerHTML = `
+      <div class="wiz-review-stat"><strong>${layers.length}</strong> ${_t('ui.wizard.layers_count')}</div>
+      <div class="wiz-review-stat"><strong>${totalRepos}</strong> ${_t('ui.wizard.repos_count')}</div>
+      <div class="wiz-bulk-actions">
+        <label class="wiz-bulk-label">${_t('ui.wizard.branch_for_all')}</label>
+        <input type="text" id="wizBulkBranch" class="wiz-bulk-input" placeholder="${_t('ui.wizard.branch_placeholder')}"
+               style="width:200px;">
+        <button onclick="RB.wizSetAllBranches()" class="wiz-bulk-apply-btn">${_t('ui.wizard.set_btn')}</button>
+      </div>
+    `;
+
+    // Render table rows
+    const tbody = document.getElementById('wizReviewBody');
+    let rows = '';
+    layers.forEach(layer => {
+      (layer.repos || []).forEach((repo, ri) => {
+        const checked = repo.included !== false ? 'checked' : '';
+        rows += `<tr data-layer="${esc(layer.id)}" data-repo="${ri}">
+          <td><input type="checkbox" ${checked}
+               onchange="RB.wizToggleRepo('${esc(layer.id)}',${ri},this.checked)"></td>
+          <td><input type="text" value="${esc(repo.name)}"
+               onchange="RB.wizEditRepo('${esc(layer.id)}',${ri},'name',this.value)"></td>
+          <td><span class="wiz-review-layer-badge">
+                <span class="wiz-review-layer-dot" style="background:${esc(layer.color)}"></span>
+                ${esc(layer.label)}
+              </span></td>
+          <td><input type="text" value="${esc(repo.url)}"
+               onchange="RB.wizEditRepo('${esc(layer.id)}',${ri},'url',this.value)"></td>
+          <td><input type="text" value="${esc(repo.default_branch)}"
+               onchange="RB.wizEditRepo('${esc(layer.id)}',${ri},'default_branch',this.value)"></td>
+          <td><input type="text" value="${esc(repo.release_branch||'')}" placeholder="(inherit)"
+               onchange="RB.wizEditRepo('${esc(layer.id)}',${ri},'release_branch',this.value)"></td>
+        </tr>`;
+      });
+    });
+    tbody.innerHTML = rows || '<tr><td colspan="6" class="wiz-review-empty-cell">' + esc(_t('ui.wizard.no_repos_found')) + '</td></tr>';
+  }
+  function wizToggleRepo(layerId, ri, checked) {
+    if (!WIZ.discovered) return;
+    const layer = WIZ.discovered.layers.find(l => l.id === layerId);
+    if (layer && layer.repos[ri]) layer.repos[ri].included = checked;
+  }
+  function wizEditRepo(layerId, ri, key, val) {
+    if (!WIZ.discovered) return;
+    const layer = WIZ.discovered.layers.find(l => l.id === layerId);
+    if (layer && layer.repos[ri]) layer.repos[ri][key] = val;
+  }
+  function wizSetAllBranches() {
+    const input = document.getElementById('wizBulkBranch');
+    if (!input || !WIZ.discovered) return;
+    const val = input.value.trim();
+    if (!val) return;
+    (WIZ.discovered.layers || []).forEach(layer => {
+      (layer.repos || []).forEach(repo => { repo.release_branch = val; });
+    });
+    // Re-render to show the updated values
+    wizRenderReview();
+  }
+
+  /* ---------- Step 4: Confirm / Apply ---------- */
+  function wizRenderConfirm() {
+    const warnEl = document.getElementById('wizWarnings');
+    if (WIZ.warnings.length) {
+      warnEl.classList.remove('hidden');
+      warnEl.style.display = '';
+      warnEl.innerHTML = `<strong>\u26a0 ${esc(_t('ui.wizard.warnings'))}:</strong><ul>${WIZ.warnings.map(w => '<li>' + esc(w) + '</li>').join('')}</ul>`;
+    } else {
+      warnEl.style.display = 'none';
+    }
+  }
+
+  async function wizApply(mode) {
+    if (!WIZ.discovered) return;
+    const layers = WIZ.discovered.layers || [];
+
+    // Build config from discovered data
+    const newLayers = [];
+    const newApps = [];
+
+    layers.forEach(layer => {
+      const layerObj = {
+        id: layer.id,
+        label: layer.label,
+        color: layer.color,
+        repository_root_url: layer.root_url || '',
+      };
+      newLayers.push(layerObj);
+      (layer.repos || []).forEach(repo => {
+        if (!repo.included) return;
+        const repoObj = {
+          name: repo.name || '',
+          url: repo.url || '',
+          layer: layer.id,
+        };
+        if (repo.release_branch) repoObj.branch_pattern = repo.release_branch;
+        newApps.push(repoObj);
+      });
+    });
+
+    if (mode === 'replace') {
+      // Full replace — keep top-level settings, clear layers+repos completely
+      draft.layers = newLayers;
+      draft.repositories = newApps;
+    } else {
+      // Merge: add new layers that don't exist, append new repos
+      const existingLayerIds = new Set((draft.layers || []).map(l => l.id));
+      newLayers.forEach(l => {
+        if (!existingLayerIds.has(l.id)) {
+          draft.layers = draft.layers || [];
+          draft.layers.push(l);
+        }
+      });
+      const existingRepoUrls = new Set((draft.repositories || []).map(r => r.url));
+      newApps.forEach(r => {
+        if (!existingRepoUrls.has(r.url)) {
+          draft.repositories = draft.repositories || [];
+          draft.repositories.push(r);
+        }
+      });
+    }
+
+    // Save: push draft to server, persist, reload
+    try {
+      const putRes = await fetch('/api/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cleanDraft(draft)),
+      });
+      const putData = await putRes.json();
+      if (!putData.ok) {
+        showModal({
+          title: _t('ui.error.validation_error'),
+          desc: _t('ui.error.config_has_errors'),
+          details: '<ul class="wiz-error-list">' + (putData.errors || []).map(e => '<li>' + esc(e) + '</li>').join('') + '</ul>',
+          buttons: [{ label: 'OK', cls: 'cancel' }]
+        });
+        return;
+      }
+      const saveRes = await fetch('/api/config/save', { method: 'POST' });
+      const saveData = await saveRes.json();
+      if (!saveData.ok) {
+        showModal({
+          title: _t('ui.error.save_error'),
+          desc: _t('ui.error.save_failed'),
+          details: '<ul class="wiz-error-list">' + (saveData.errors || []).map(e => '<li>' + esc(e) + '</li>').join('') + '</ul>',
+          buttons: [{ label: 'OK', cls: 'cancel' }]
+        });
+        return;
+      }
+      closeWizard();
+      window.location.reload();
+    } catch (err) {
+      showModal({
+        title: _t('ui.error.save_error'),
+        desc: _t('ui.error.unexpected', {message: esc(err.message)}),
+        buttons: [{ label: 'OK', cls: 'cancel' }]
+      });
+    }
+  }

@@ -1,0 +1,34 @@
+{
+  "release": {
+    "name": "Q1 2026 Release",
+    "target_month": 3,
+    "target_year": 2026,
+    "branch_pattern": "release/{YYYY}.{MM}"
+  },
+  "layers": [
+    {
+      "id": "app",
+      "label": "Application",
+      "color": "#6366F1"
+    }
+  ],
+  "repositories": [
+    {
+      "name": "Frontend",
+      "url": "https://github.com/acme/frontend",
+      "layer": "app"
+    },
+    {
+      "name": "Backend",
+      "url": "https://github.com/acme/backend",
+      "layer": "app"
+    }
+  ],
+  "settings": {
+    "stale_threshold_days": 14,
+    "output_path": "output/dashboard.html",
+    "theme": "system",
+    "timeout_seconds": 30,
+    "max_concurrent": 5
+  }
+}

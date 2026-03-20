@@ -1,0 +1,219 @@
+<!-- ===== Detail Modal ===== -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="detailModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-header"><h3 id="modalTitle"></h3><button class="modal-close" onclick="closeDetail()" aria-label="{{ _t('ui.aria.close') if _t is defined else 'Close' }}">✕</button></div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- ===== Config Wizard Modal ===== -->
+<div class="wizard-overlay" id="wizardOverlay" onclick="if(event.target===this&&typeof RB!=='undefined')RB.closeWizard()">
+  <div class="wizard-panel">
+    <div class="wizard-header">
+      <h2>🔧 <span data-i18n="ui.wizard.title">Prepare Config</span></h2>
+      <button class="wizard-close" onclick="RB.closeWizard()" aria-label="Close" data-i18n-aria-label="ui.aria.close_modal">✕</button>
+    </div>
+    <div class="wizard-steps" id="wizardSteps" role="tablist">
+      <div class="wizard-step-tab active" data-step="0" role="tab" aria-selected="true" tabindex="0"><span class="step-num">1</span><span data-i18n="ui.wizard.step.layers">Layers</span></div>
+      <div class="wizard-step-tab" data-step="1" role="tab" aria-selected="false" tabindex="-1"><span class="step-num">2</span><span data-i18n="ui.wizard.step.scanning">Scanning</span></div>
+      <div class="wizard-step-tab" data-step="2" role="tab" aria-selected="false" tabindex="-1"><span class="step-num">3</span><span data-i18n="ui.wizard.step.review">Review</span></div>
+      <div class="wizard-step-tab" data-step="3" role="tab" aria-selected="false" tabindex="-1"><span class="step-num">4</span><span data-i18n="ui.wizard.step.confirmation">Confirmation</span></div>
+    </div>
+    <div class="wizard-body" id="wizardBody">
+      <!-- Step 1: Layers -->
+      <div class="wizard-step-content active" id="wizStep0">
+        <p id="wizProviderDesc" class="wiz-description" data-i18n="ui.wizard.desc.github">
+          Define application layers and provide the GitHub organization URL for each. The system will automatically discover repositories.
+        </p>
+        <!-- Provider switcher -->
+        <div class="wiz-tab-group">
+          <button class="wiz-provider-btn active wiz-tab-btn" id="wizProvGithub" onclick="RB.wizSetProvider('github')">
+            <span class="icon-mr">⬤</span> GitHub
+          </button>
+          <button class="wiz-provider-btn wiz-tab-btn wiz-tab-btn--bordered" id="wizProvGitlab" onclick="RB.wizSetProvider('gitlab')">
+            <span class="icon-mr">🦊</span> GitLab
+          </button>
+        </div>
+        <!-- Token section -->
+        <div id="wizTokenSection" class="wiz-token-section">
+          <label id="wizTokenLabel" class="wiz-form-label">
+            <span data-i18n="ui.wizard.github_token">GitHub Token</span> <span class="wiz-token-optional" data-i18n="ui.wizard.github_token_optional">(optional — increases limit from 60 to 5,000 req/h)</span>
+          </label>
+          <input type="password" id="wizProviderToken" class="wiz-form-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                 oninput="this.classList.remove('has-error');var e=this.parentElement.querySelector('.wiz-field-error');if(e)e.remove();">
+          <div id="wizTokenHelp" class="wiz-helper-text">
+            <span data-i18n="ui.wizard.github_token_help">Without a token, the GitHub API allows 60 requests/h. Generate a token at</span>
+            <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a>
+            (scope: <code class="wiz-code-inline">public_repo</code>).
+            <span data-i18n="ui.wizard.token_disclaimer">The token is used only during scanning and is not saved.</span>
+          </div>
+        </div>
+        <div class="wiz-layer-list" id="wizLayerList"></div>
+        <div class="wiz-inline-error hidden" id="wizStep0Error"></div>
+        <button class="wiz-add-layer" onclick="RB.wizAddLayer()" data-i18n="ui.wizard.add_layer">+ Add layer</button>
+      </div>
+      <!-- Step 2: Scanning -->
+      <div class="wizard-step-content" id="wizStep1">
+        <p id="wizScanDesc" class="wiz-description" data-i18n="ui.wizard.scanning">
+          Scanning repositories…
+        </p>
+        <div class="wiz-scan-area" id="wizScanArea"></div>
+      </div>
+      <!-- Step 3: Review -->
+      <div class="wizard-step-content" id="wizStep2">
+        <div class="wiz-review-summary" id="wizReviewSummary"></div>
+        <div class="overflow-x-auto">
+          <table class="wiz-review-table">
+            <thead>
+              <tr>
+                <th scope="col" class="wiz-checkbox-col">✓</th>
+                <th scope="col" data-i18n="ui.table.repository">Repository</th>
+                <th scope="col" data-i18n="ui.table.layer">Layer</th>
+                <th scope="col">URL</th>
+                <th scope="col" data-i18n="ui.table.default_branch">Default branch</th>
+                <th scope="col" data-i18n="ui.table.release_branch">Release branch</th>
+              </tr>
+            </thead>
+            <tbody id="wizReviewBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Step 4: Confirm -->
+      <div class="wizard-step-content" id="wizStep3">
+        <div class="wiz-confirm-box">
+          <h3 data-i18n="ui.wizard.apply_title">Would you like to use this configuration?</h3>
+          <p data-i18n="ui.wizard.apply_desc">Discovered repositories will be saved as a new ReleaseBoard configuration.</p>
+          <div class="wiz-confirm-actions">
+            <button class="wiz-btn primary" onclick="RB.wizApply('replace')" data-i18n="ui.wizard.replace_config">Replace current configuration</button>
+            <button class="wiz-btn" onclick="RB.wizApply('merge')" data-i18n="ui.wizard.merge_config">Merge with current</button>
+            <button class="wiz-btn" onclick="RB.wizGoStep(2)" data-i18n="ui.wizard.back_to_editing">Back to editing</button>
+            <button class="wiz-btn" onclick="RB.closeWizard()" data-i18n="ui.cancel">Cancel</button>
+          </div>
+        </div>
+        <div class="wiz-warnings hidden" id="wizWarnings"></div>
+      </div>
+    </div>
+    <div class="wizard-footer" id="wizardFooter">
+      <button class="wiz-btn" id="wizBtnPrev" onclick="RB.wizPrev()" style="display:none;" data-i18n="ui.wizard.btn_prev">← Back</button>
+      <span class="spacer"></span>
+      <button class="wiz-btn primary" id="wizBtnNext" onclick="RB.wizNext()" data-i18n="ui.wizard.btn_next">Next →</button>
+    </div>
+  </div>
+</div>
+
+{% if vm.interactive %}
+<!-- ===== Delete Confirmation Modal ===== -->
+<div class="confirm-overlay" id="deleteOverlay">
+  <div class="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="deleteTitle">
+    <h3 id="deleteTitle" data-i18n="ui.delete.title">Remove Repository</h3>
+    <div class="confirm-desc" data-i18n="ui.delete.description">This repository will be removed from the configuration draft.</div>
+    <div class="confirm-details" id="deleteDetails"></div>
+    <div class="confirm-actions">
+      <button class="confirm-btn cancel" onclick="closeDeleteModal()" data-i18n="ui.btn.cancel">Cancel</button>
+      <button class="confirm-btn danger" id="deleteConfirmBtn" data-i18n="ui.btn.remove">Remove</button>
+    </div>
+  </div>
+</div>
+<!-- Generic confirmation / message modal -->
+<div class="confirm-overlay" id="genericOverlay">
+  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="genericTitle">
+    <h3 id="genericTitle"></h3>
+    <div class="confirm-desc" id="genericDesc"></div>
+    <div class="confirm-details hidden" id="genericDetails"></div>
+    <div class="confirm-actions" id="genericActions"></div>
+  </div>
+</div>
+<!-- ===== Config Import Wizard ===== -->
+<div class="rc-wizard-overlay" id="cfgImportOverlay" onclick="if(event.target===this)RB.closeConfigImport()">
+  <div class="rc-wizard-panel modal-narrow" role="dialog" aria-labelledby="cfgImportTitle" aria-modal="true">    <div class="rc-wizard-header">
+      <h2 id="cfgImportTitle">📥 <span data-i18n="ui.config_import.title">Import Configuration</span></h2>
+      <button class="rc-wizard-close" onclick="RB.closeConfigImport()" aria-label="Close" data-i18n-aria-label="ui.aria.close_modal">&times;</button>
+    </div>
+    <div class="rc-wizard-body modal-body-padded">
+      <p class="wiz-import-desc" data-i18n="ui.config_import.description">Import a ReleaseBoard configuration from a JSON file. The file will be validated against the schema before import.</p>
+      <div class="rc-import-notice wiz-notice-box">
+        <strong>⚠️ <span data-i18n="ui.config_import.json_only">Only JSON files are accepted.</span></strong>
+        <span class="text-tertiary" data-i18n="ui.config_import.schema_notice"> The data must match the configuration schema. Validation errors will be shown if the file is invalid.</span>
+      </div>
+      <!-- File Drop Zone -->
+      <div class="rc-import-dropzone" id="cfgImportDropzone" onclick="document.getElementById('cfgImportFileInput').click()">
+        <div class="rc-dropzone-icon">📁</div>
+        <div data-i18n="ui.config_import.drop_or_browse">Drop a JSON file here or click to browse</div>
+        <input type="file" id="cfgImportFileInput" accept=".json" class="hidden" onchange="RB.handleConfigImportFile(event)">
+      </div>
+      <div class="wiz-divider">
+        <div class="wiz-divider-line"></div>
+        <span class="wiz-divider-label" data-i18n="ui.config_import.or">or</span>
+        <div class="wiz-divider-line"></div>
+      </div>
+      <button class="rc-btn wiz-btn-full" onclick="RB.closeConfigImport();RB.openWizard()">
+        🧙 <span data-i18n="ui.config_import.create_from_scratch">Create configuration from scratch</span>
+      </button>
+      <!-- Validation Status -->
+      <div id="cfgImportStatus" style="display:none;"></div>
+      <!-- Schema Reference (collapsible) -->
+      <div class="rc-import-schema-section wiz-collapsible-section">
+        <button class="rc-btn btn-sm" onclick="RB.toggleCfgImportSchema()" id="cfgSchemaToggle" data-i18n="ui.config_import.show_schema">Show expected JSON format</button>
+        <div id="cfgSchemaContent" style="display:none;" class="mt-12">
+          <h4 class="wiz-section-heading" data-i18n="ui.config_import.schema_title">Expected JSON Schema</h4>
+          <p class="wiz-schema-hint" data-i18n="ui.config_import.schema_hint">Your JSON file must follow this structure. Required fields: release, repositories.</p>
+          <div id="cfgSchemaDisplay" class="rc-import-code"></div>
+          <button class="rc-btn btn-sm mt-12" onclick="RB.toggleCfgImportExample()" id="cfgExampleToggle" data-i18n="ui.config_import.show_example">Show example configuration</button>
+          <div id="cfgExampleDisplay" class="rc-import-code mt-12" style="display:none;"></div>
+        </div>
+      </div>
+      <!-- Action buttons (hidden until file validated) -->
+      <div id="cfgImportActions" style="display:none;" class="wiz-collapsible-section">
+        <div class="wiz-btn-group">
+          <button class="rc-btn primary" id="cfgImportReplace" onclick="RB.configImportReplace()" data-i18n="ui.config_import.replace_save">Replace &amp; Save</button>
+          <button class="rc-btn" id="cfgImportPreview" onclick="RB.configImportPreview()" data-i18n="ui.config_import.preview_only">Preview Only</button>
+          <button class="rc-btn" onclick="RB.closeConfigImport()" data-i18n="ui.cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- ===== Tag Export Modal ===== -->
+<div class="rc-wizard-overlay" id="tagExportOverlay" onclick="if(event.target===this)RB.closeTagExport()">
+  <div class="rc-wizard-panel modal-narrow" role="dialog" aria-labelledby="tagExportTitle" aria-modal="true">
+    <div class="rc-wizard-header">
+      <h2 id="tagExportTitle">🏷️ <span data-i18n="ui.tag_export.title">Export Application Tags</span></h2>
+      <button class="rc-wizard-close" onclick="RB.closeTagExport()" aria-label="Close" data-i18n-aria-label="ui.aria.close_modal">&times;</button>
+    </div>
+    <div class="rc-wizard-body modal-body-padded">
+      <p class="wiz-description" data-i18n="ui.tag_export.description">Export the latest branch-relevant tags for all analyzed applications as a YAML file. Only GitLab repositories with resolved tags are included.</p>
+      <!-- Filename input -->
+      <div class="rc-form-group">
+        <label for="tagExportFilename" data-i18n="ui.tag_export.filename_label">File name</label>
+        <div class="te-filename-row">
+          <input type="text" id="tagExportFilename" class="rc-input" placeholder="2026.04-release-1" oninput="RB._tagExportRefresh()">
+          <span class="te-filename-ext">.yaml</span>
+        </div>
+        <div class="rc-hint" data-i18n="ui.tag_export.filename_hint">Letters, digits, hyphens, dots, and underscores are allowed.</div>
+        <div class="rc-field-error" id="tagExportFilenameError"></div>
+      </div>
+      <!-- Toggle: include disabled -->
+      <div class="rc-form-group">
+        <label class="te-toggle-row">
+          <input type="checkbox" id="tagExportIncludeNoTag" onchange="RB._tagExportRefresh()">
+          <span data-i18n="ui.tag_export.include_no_tag">Include applications without a tag (enabled: false)</span>
+        </label>
+      </div>
+      <!-- Stats -->
+      <div class="te-stats" id="tagExportStats"></div>
+      <!-- YAML Preview -->
+      <div class="rc-form-group">
+        <label data-i18n="ui.tag_export.preview_label">Preview</label>
+        <pre class="te-yaml-preview" id="tagExportPreview"></pre>
+      </div>
+      <!-- Actions -->
+      <div class="rc-btn-group">
+        <button class="rc-btn primary" id="tagExportDownloadBtn" onclick="RB.tagExportDownload()" data-i18n="ui.tag_export.download">⤓ Download YAML</button>
+        <button class="rc-btn" onclick="RB.tagExportCopy()" data-i18n="ui.tag_export.copy">📋 Copy to Clipboard</button>
+        <button class="rc-btn" onclick="RB.closeTagExport()" data-i18n="ui.cancel">Cancel</button>
+      </div>
+      <div class="te-status" id="tagExportStatus"></div>
+    </div>
+  </div>
+</div>
+{% endif %}

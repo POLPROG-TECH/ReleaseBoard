@@ -1,0 +1,324 @@
+<script>
+/* ============================================================
+   ReleaseBoard — Core JavaScript
+   ============================================================ */
+const REPO_DATA = {
+{% for repo in vm.all_repos %}
+  "{{ repo.name|e }}": {name:"{{ repo.name|e }}",url:"{{ repo.url|e }}",layer:"{{ repo.layer|e }}",layerLabel:"{{ repo.layer_label|e }}",status:"{{ repo.status }}",statusLabel:"{{ repo.status_label|e }}",statusColorBg:"{{ repo.status_color_bg }}",statusBadgeBg:"{{ repo.status_badge_bg }}",statusBadgeFg:"{{ repo.status_badge_fg }}",expectedBranch:"{{ repo.expected_branch|e }}",actualBranch:"{{ repo.actual_branch|e }}",namingValid:{{ 'true' if repo.naming_valid else 'false' }},isStale:{{ 'true' if repo.is_stale else 'false' }},lastActivity:"{{ repo.last_activity|e }}",firstActivity:"{{ repo.first_activity|e }}",lastAuthor:"{{ repo.last_author|e }}",lastMessage:"{{ repo.last_message|e }}",commitCount:"{{ repo.commit_count }}",freshness:"{{ repo.freshness|e }}",branchExists:{{ 'true' if repo.branch_exists else 'false' }},warnings:{{ repo.warnings|tojson }},notes:{{ repo.notes|tojson }},errorMessage:"{{ repo.error_message|e }}",errorKind:"{{ repo.error_kind|e }}",errorDetail:"{{ repo.error_detail|e }}",repoDefaultBranch:"{{ repo.repo_default_branch|e }}",repoVisibility:"{{ repo.repo_visibility|e }}",repoDescription:"{{ repo.repo_description|e }}",repoWebUrl:"{{ repo.repo_web_url|e }}",repoOwner:"{{ repo.repo_owner|e }}",dataSource:"{{ repo.data_source|e }}",latestTag:"{{ repo.latest_tag|e }}",latestTagSha:"{{ repo.latest_tag_sha|e }}",latestTagDate:"{{ repo.latest_tag_date|e }}",latestTagMessage:"{{ repo.latest_tag_message|e }}",isGitlab:{{ 'true' if repo.is_gitlab else 'false' }}},
+{% endfor %}
+};
+
+/* --- Theme --- */
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);document.querySelectorAll('.theme-btn[data-theme]').forEach(b=>b.classList.toggle('active',b.dataset.theme===t));try{localStorage.setItem('rb-theme',t)}catch(e){}}
+document.querySelectorAll('.theme-btn[data-theme]').forEach(b=>b.addEventListener('click',()=>setTheme(b.dataset.theme)));
+try{const s=localStorage.getItem('rb-theme');if(s)setTheme(s)}catch(e){}
+/* Locale highlight */
+(function(){const loc=typeof RB_LOCALE!=='undefined'?RB_LOCALE:'';document.querySelectorAll('.theme-btn[data-locale]').forEach(b=>b.classList.toggle('active',b.dataset.locale===loc));})();
+
+/* --- Filters --- */
+const searchInput=document.getElementById('searchInput'),layerFilter=document.getElementById('layerFilter'),statusFilter=document.getElementById('statusFilter'),namingFilter=document.getElementById('namingFilter'),filterCount=document.getElementById('filterCount'),filterReset=document.getElementById('filterReset'),noResultsMsg=document.getElementById('noResultsMessage');
+function applyFilters(){const s=searchInput?searchInput.value.toLowerCase().trim():'',l=layerFilter?layerFilter.value:'',st=statusFilter?statusFilter.value:'',n=namingFilter?namingFilter.value:'';let v=0;document.querySelectorAll('.filterable-row').forEach(r=>{let show=true;if(s&&!(r.dataset.repo||'').toLowerCase().includes(s))show=false;if(l&&r.dataset.layer!==l)show=false;if(st&&r.dataset.status!==st)show=false;if(n&&r.dataset.naming!==n)show=false;r.classList.toggle('hidden',!show);if(show)v++});document.querySelectorAll('.layer-section').forEach(sec=>{if(l&&sec.dataset.layerSection!==l){sec.classList.add('hidden')}else{sec.classList.remove('hidden');const vis=sec.querySelectorAll('.filterable-row:not(.hidden)');sec.classList.toggle('hidden',vis.length===0)}});if(filterCount)filterCount.textContent=_tp('ui.filter.repo_count',v);if(noResultsMsg){const hasFilters=s||l||st||n;if(v===0&&hasFilters){const qEl=noResultsMsg.querySelector('.no-results-query');if(qEl)qEl.textContent=s||l||st||n;noResultsMsg.style.display='block';}else{noResultsMsg.style.display='none';}}}
+[searchInput,layerFilter,statusFilter,namingFilter].forEach(e=>{if(e){e.addEventListener('input',applyFilters);e.addEventListener('change',applyFilters)}});
+if(filterReset)filterReset.addEventListener('click',()=>{if(searchInput)searchInput.value='';if(layerFilter)layerFilter.value='';if(statusFilter)statusFilter.value='';if(namingFilter)namingFilter.value='';applyFilters()});
+
+/* --- Detail Modal --- */
+var _detailTrapRelease = null;
+function showDetail(name){
+  const r=REPO_DATA[name];if(!r)return;
+  document.getElementById('modalTitle').textContent=r.name;
+  const dsLabel={'github_api':_t('ui.detail.data_source.github_api'),'git_cli':_t('ui.detail.data_source.git_cli'),'local':_t('ui.detail.data_source.local')};
+  let h='';
+  // Overview section
+  h+='<div class="detail-group"><div class="detail-group-title">'+_t('ui.detail.overview')+'</div><div class="detail-grid">';
+  h+=dr(_t('ui.detail.layer'),r.layerLabel);
+  h+=dr(_t('ui.detail.status'),'<span class="status-badge" style="background:'+r.statusBadgeBg+';color:'+r.statusBadgeFg+';"><span class="status-dot" style="background:'+r.statusColorBg+';"></span>'+r.statusLabel+'</span>');
+  h+=dr('URL','<a href="'+r.url+'" target="_blank" class="word-break-all">'+esc(r.url)+'</a>');
+  if(r.dataSource)h+=dr(_t('ui.detail.data_source'),'<span class="note-item" style="margin:0;padding:2px 8px;display:inline-block">'+(dsLabel[r.dataSource]||esc(r.dataSource))+'</span>');
+  h+='</div></div>';
+  // Branch section
+  h+='<div class="detail-group"><div class="detail-group-title">'+_t('ui.detail.branch_info')+'</div><div class="detail-grid">';
+  h+=dr(_t('ui.detail.expected'),'<code class="branch-name">'+esc(r.expectedBranch)+'</code>');
+  if(r.branchExists){
+    h+=dr(_t('ui.detail.actual'),'<code class="branch-name">'+esc(r.actualBranch)+'</code>');
+    h+=dr(_t('ui.detail.naming'),r.namingValid?'<span class="check-icon">✓ Valid</span>':'<span class="cross-icon">✗ Invalid</span>');
+  }else{
+    h+=dr(_t('ui.detail.branch'),'<span class="text-muted">'+_t('ui.detail.not_found')+'</span>');
+  }
+  if(r.repoDefaultBranch)h+=dr(_t('ui.detail.default_branch'),'<code>'+esc(r.repoDefaultBranch)+'</code>');
+  h+='</div></div>';
+  // Activity section
+  if(r.branchExists){
+    h+='<div class="detail-group"><div class="detail-group-title">'+_t('ui.detail.activity')+'</div><div class="detail-grid">';
+    h+=dr(_t('ui.detail.last_activity'),r.lastActivity);
+    h+=dr(_t('ui.detail.first_activity'),r.firstActivity);
+    h+=dr(_t('ui.detail.author'),r.lastAuthor||'—');
+    h+=dr(_t('ui.detail.commit'),r.lastMessage||'—');
+    h+=dr(_t('ui.detail.count'),r.commitCount);
+    h+=dr(_t('ui.detail.freshness'),r.freshness);
+    h+=dr(_t('ui.detail.stale'),r.isStale?'<span class="cross-icon">⚠ Yes</span>':'<span class="check-icon">No</span>');
+    h+='</div></div>';
+  }
+  // Metadata section
+  const hasMeta = r.repoVisibility||r.repoDescription||r.repoOwner||r.repoWebUrl;
+  if(hasMeta){
+    h+='<div class="detail-group"><div class="detail-group-title">'+_t('ui.detail.metadata')+'</div><div class="detail-grid">';
+    if(r.repoVisibility)h+=dr(_t('ui.detail.visibility'),esc(r.repoVisibility));
+    if(r.repoDescription)h+=dr(_t('ui.detail.description'),esc(r.repoDescription));
+    if(r.repoOwner)h+=dr(_t('ui.detail.owner'),esc(r.repoOwner));
+    if(r.repoWebUrl)h+=dr(_t('ui.detail.web_url'),'<a href="'+esc(r.repoWebUrl)+'" target="_blank" class="word-break-all">'+esc(r.repoWebUrl)+'</a>');
+    h+='</div></div>';
+  }
+  // GitLab tag section
+  if(r.isGitlab){
+    h+='<div class="detail-group"><div class="detail-group-title">'+_t('ui.detail.tag_info')+'</div><div class="detail-grid">';
+    if(r.latestTag){
+      h+=dr(_t('ui.detail.tag_name'),'<code class="branch-name">'+esc(r.latestTag)+'</code>');
+      if(r.latestTagSha)h+=dr(_t('ui.detail.tag_sha'),'<code>'+esc(r.latestTagSha.substring(0,12))+'</code>');
+      if(r.latestTagDate)h+=dr(_t('ui.detail.tag_date'),esc(r.latestTagDate));
+      if(r.latestTagMessage)h+=dr(_t('ui.detail.tag_message'),esc(r.latestTagMessage));
+      h+=dr(_t('ui.detail.tag_branch_ctx'),esc(r.actualBranch||r.expectedBranch));
+    }else{
+      h+=dr(_t('ui.detail.tag_name'),'<span class="text-muted">'+_t('ui.table.latest_tag.no_tag')+'</span>');
+    }
+    h+=dr(_t('ui.detail.tag_note'),_t('ui.detail.tag_derivation'));
+    h+='</div></div>';
+  }
+  // Diagnostics
+  if(r.status==='missing_branch'&&!r.errorMessage){
+    h+='<div class="detail-group"><div class="detail-group-title">'+_t('ui.detail.diagnostics')+'</div><div class="detail-grid">';
+    h+=dr(_t('ui.detail.connectivity'),'<span class="check-icon">✓ '+_t('ui.detail.repo_reachable')+'</span>');
+    if(r.repoDefaultBranch)h+=dr(_t('ui.detail.default_branch'),'<code>'+esc(r.repoDefaultBranch)+'</code> detected');
+    h+=dr(_t('ui.detail.release_branch'),'<span class="cross-icon">✗ '+_t('ui.detail.not_found')+'</span>');
+    h+=dr(_t('ui.detail.expected'),'<code>'+esc(r.expectedBranch)+'</code>');
+    const dsSrc=r.dataSource?(dsLabel[r.dataSource]||r.dataSource):'unknown';
+    h+=dr(_t('ui.detail.data_source'),esc(dsSrc));
+    h+=dr(_t('ui.detail.analysis'),_t('ui.detail.blocked_msg'));
+    h+='</div></div>';
+  }
+  // Errors
+  if(r.errorMessage){
+    let errHtml='<div class="detail-section"><h4>'+_t('ui.detail.error')+'</h4>';
+    if(r.errorKind){const kindCls=r.errorKind==='placeholder_url'?'placeholder':'';errHtml+='<span class="error-kind-badge '+kindCls+'">'+esc(r.errorKind)+'</span> ';}
+    errHtml+='<div class="warning-item">'+esc(r.errorMessage)+'</div>';
+    if(r.errorDetail&&r.errorDetail!==r.errorMessage){errHtml+='<span class="error-detail-toggle" onclick="this.nextElementSibling.classList.toggle(\'open\')">'+_t('ui.detail.show_details')+'</span><div class="error-detail-expandable">'+esc(r.errorDetail)+'</div>';}
+    errHtml+='</div>';h+=errHtml;
+  }
+  if(r.warnings.length)r.warnings.forEach(w=>h+='<div class="detail-section"><div class="warning-item">'+esc(w)+'</div></div>');
+  if(r.notes.length)r.notes.forEach(n=>h+='<div class="detail-section"><div class="note-item">'+esc(n)+'</div></div>');
+  document.getElementById('modalBody').innerHTML=h;
+  document.getElementById('modalOverlay').classList.add('active');
+  if(typeof trapFocus==='function'){setTimeout(function(){_detailTrapRelease=trapFocus(document.getElementById('detailModal'))},50);}
+}
+function closeDetail(){document.getElementById('modalOverlay').classList.remove('active');if(_detailTrapRelease){_detailTrapRelease();_detailTrapRelease=null;}}
+document.getElementById('modalOverlay').addEventListener('click',e=>{if(e.target===document.getElementById('modalOverlay'))closeDetail()});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if(document.getElementById('detailModal') && document.getElementById('detailModal').closest('.modal-overlay.active')) { closeDetail(); return; }
+  if(document.getElementById('deleteModal') && document.getElementById('deleteModal').classList.contains('active')) { if(typeof closeDeleteModal==='function') closeDeleteModal(); return; }
+  if(document.getElementById('configImportOverlay') && document.getElementById('configImportOverlay').classList.contains('active')) { if(typeof RB!=='undefined') RB.closeConfigImport(); return; }
+  if(document.getElementById('aboutModal') && document.getElementById('aboutModal').closest('.modal-overlay.active')) { closeAbout(); return; }
+  if(document.getElementById('rcPreviewOverlay') && document.getElementById('rcPreviewOverlay').classList.contains('active')) { if(typeof RC!=='undefined') RC.closePreview(); return; }
+  if(document.getElementById('rpWizardOverlay') && document.getElementById('rpWizardOverlay').classList.contains('active')) { if(typeof RP!=='undefined') RP.closeWizard(); return; }
+  if(document.getElementById('rcWizardOverlay') && document.getElementById('rcWizardOverlay').classList.contains('active')) { if(typeof RC!=='undefined') RC.closeWizard(); return; }
+  if(document.getElementById('dashboardWizardOverlay') && document.getElementById('dashboardWizardOverlay').classList.contains('active')) { if(typeof RB!=='undefined') RB.closeWizard(); return; }
+  if(document.getElementById('modalOverlay') && document.getElementById('modalOverlay').classList.contains('active')) { closeModal(); return; }
+  if(document.getElementById('drawerOverlay') && document.getElementById('drawerOverlay').classList.contains('active')) { if(typeof RB!=='undefined') RB.closeDrawer(); return; }
+});
+function dr(l,v){return'<div class="detail-label">'+l+'</div><div class="detail-value">'+v+'</div>'}
+function esc(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML}
+
+/* Strip internal _-prefixed keys before sending draft to server */
+function cleanDraft(obj){
+  return JSON.parse(JSON.stringify(obj, (k, v) => k.startsWith('_') ? undefined : v));
+}
+
+/* Show/hide inline error message in a container */
+function showInlineError(elId, msg) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = esc(msg);
+  el.classList.remove('hidden');
+  el.style.display = '';
+}
+function showInlineErrors(elId, msgs) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = '<ul>' + msgs.map(m => '<li>' + esc(m) + '</li>').join('') + '</ul>';
+  el.classList.remove('hidden');
+  el.style.display = '';
+}
+function hideInlineError(elId) {
+  const el = document.getElementById(elId);
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+}
+
+/* B1: Focus trap utility for modals/drawers/wizards */
+function trapFocus(container) {
+  const focusable = container.querySelectorAll('button:not([disabled]):not([tabindex="-1"]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
+  if (!focusable.length) return null;
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  function handler(e) {
+    if (e.key !== 'Tab') return;
+    if (e.shiftKey) { if (document.activeElement === first) { e.preventDefault(); last.focus(); } }
+    else { if (document.activeElement === last) { e.preventDefault(); first.focus(); } }
+  }
+  container.addEventListener('keydown', handler);
+  first.focus();
+  return function release() { container.removeEventListener('keydown', handler); };
+}
+
+/* Lightweight toast notification (auto-dismisses) */
+function showToast(msg, type) {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;';
+    document.body.appendChild(container);
+  }
+  const t = document.createElement('div');
+  const bg = type === 'error' ? 'rgba(239,68,68,.95)' : type === 'success' ? 'rgba(16,185,129,.95)' : 'rgba(99,102,241,.95)';
+  t.style.cssText = 'pointer-events:auto;padding:10px 18px;border-radius:8px;background:'+bg+';color:#fff;font-size:.85rem;line-height:1.4;max-width:420px;box-shadow:0 4px 16px rgba(0,0,0,.2);opacity:0;transform:translateY(10px);transition:all .3s ease;';
+  t.textContent = msg;
+  container.appendChild(t);
+  requestAnimationFrame(() => { t.style.opacity = '1'; t.style.transform = 'translateY(0)'; });
+  setTimeout(() => {
+    t.style.opacity = '0'; t.style.transform = 'translateY(10px)';
+    setTimeout(() => t.remove(), 300);
+  }, 5000);
+}
+
+/* --- Delete Confirmation Modal --- */
+function closeDeleteModal(){const el=document.getElementById('deleteOverlay');if(el)el.classList.remove('active');}
+const delOverlay=document.getElementById('deleteOverlay');
+if(delOverlay)delOverlay.addEventListener('click',e=>{if(e.target===delOverlay)closeDeleteModal()});
+
+/* --- Generic Confirm/Message Modal --- */
+function showModal(opts) {
+  /* opts: { title, desc, details?, buttons: [{label, cls?, onClick}], onClose? } */
+  const titleEl = document.getElementById('genericTitle');
+  if (!titleEl) return; // non-interactive mode
+  titleEl.textContent = opts.title || '';
+  document.getElementById('genericDesc').innerHTML = opts.desc || '';
+  const det = document.getElementById('genericDetails');
+  if (opts.details) { det.innerHTML = opts.details; det.classList.remove('hidden'); det.style.display = ''; } else { det.innerHTML = ''; det.style.display = 'none'; }
+  const acts = document.getElementById('genericActions');
+  acts.innerHTML = '';
+  (opts.buttons || []).forEach(b => {
+    const btn = document.createElement('button');
+    btn.className = 'confirm-btn ' + (b.cls || 'cancel');
+    btn.textContent = b.label;
+    btn.onclick = function(){ if(b.onClick) b.onClick(); else closeModal(); };
+    acts.appendChild(btn);
+  });
+  document.getElementById('genericOverlay').classList.add('active');
+  document.getElementById('genericOverlay')._onClose = opts.onClose || null;
+}
+function closeModal(){
+  const el = document.getElementById('genericOverlay');
+  if (!el) return;
+  const cb = el._onClose; el._onClose = null;
+  el.classList.remove('active');
+  if(cb) cb();
+}
+(function(){
+  const go = document.getElementById('genericOverlay');
+  if(go) go.addEventListener('click', e => { if(e.target === go) closeModal(); });
+})();
+
+/* --- Environment Milestones --- */
+(function(){
+  try {
+    const cfg = JSON.parse({{ vm.config_json|tojson }});
+    const cal = cfg.release_calendar;
+    if (!cal) return;
+    const schedule = cal.months || [];
+    const events = cal.events || [];
+    const phases = {};
+    const ENTERPRISE = ['feature_freeze','promote_sit','sit_start','sit_end','fov_readiness','promote_uat','uat_end','hard_code_freeze','uat2_install','uat2_end','prod_install'];
+    const LEGACY = ['dev','sit','uat','preprod','prod'];
+    const KEY_MILESTONES = ['sit_start','sit_end','uat_end','uat2_end','prod_install','sit','uat','preprod','prod'];
+    const ALL = ENTERPRISE.concat(LEGACY);
+    const LABELS = {
+      feature_freeze:_t('rc.milestone.feature_freeze'),promote_sit:_t('rc.milestone.promote_sit'),sit_start:_t('rc.milestone.sit_start'),sit_end:_t('rc.milestone.sit_end'),
+      fov_readiness:_t('rc.milestone.fov_readiness'),promote_uat:_t('rc.milestone.promote_uat'),uat_end:_t('rc.milestone.uat_end'),hard_code_freeze:_t('rc.milestone.hard_code_freeze'),
+      uat2_install:_t('rc.milestone.uat2_install'),uat2_end:_t('rc.milestone.uat2_end'),prod_install:_t('rc.milestone.prod_install'),
+      dev:_t('rc.milestone.dev'),sit:_t('rc.milestone.sit'),uat:_t('rc.milestone.uat'),preprod:_t('rc.milestone.preprod'),prod:_t('rc.milestone.prod')
+    };
+    const COLORS = {
+      feature_freeze:'#6366F1',promote_sit:'#14B8A6',sit_start:'#0EA5E9',sit_end:'#0284C7',
+      fov_readiness:'#F59E0B',promote_uat:'#D97706',uat_end:'#EA580C',hard_code_freeze:'#4F46E5',
+      uat2_install:'#8B5CF6',uat2_end:'#7C3AED',prod_install:'#10B981',
+      dev:'#3B82F6',sit:'#0EA5E9',uat:'#F59E0B',preprod:'#8B5CF6',prod:'#10B981'
+    };
+
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayStr = today.toISOString().slice(0,10);
+
+    function pickBest(phase, dateStr) {
+      if (!dateStr) return;
+      const d = new Date(dateStr + 'T00:00:00');
+      if (isNaN(d.getTime())) return;
+      if (!phases[phase]) { phases[phase] = dateStr; return; }
+      const existing = new Date(phases[phase] + 'T00:00:00');
+      const dFuture = d >= today, eFuture = existing >= today;
+      if (dFuture && eFuture) { if (d < existing) phases[phase] = dateStr; }
+      else if (dFuture && !eFuture) { phases[phase] = dateStr; }
+      else if (!dFuture && !eFuture) { if (d > existing) phases[phase] = dateStr; }
+    }
+
+    events.forEach(function(evt) { if (evt && evt.date && evt.phase) pickBest(evt.phase, evt.date); });
+    schedule.forEach(function(m) { if (!m.phases) return; ALL.forEach(function(e) { if (m.phases[e]) pickBest(e, m.phases[e]); }); });
+    const rp = cfg.release && cfg.release.phases;
+    if (rp) LEGACY.forEach(function(e) { if (rp[e] && !phases[e]) phases[e] = rp[e]; });
+
+    const allFilled = ALL.filter(function(e) { return phases[e]; });
+    if (allFilled.length === 0) return;
+
+    const section = document.getElementById('envMilestonesSection');
+    const timeline = document.getElementById('envTimeline');
+    if (!section || !timeline) return;
+
+    function daysDiff(dateStr) { return Math.round((new Date(dateStr + 'T00:00:00') - today) / 86400000); }
+    function formatCountdown(days) {
+      if (days === 0) return '<span class="env-countdown today">' + (_t ? _t('rc.milestone.today') : 'today') + '</span>';
+      if (days > 0) return '<span class="env-countdown future">' + (_t ? _t('rc.milestone.in_days').replace('{n}', days) : 'in ' + days + ' days') + '</span>';
+      return '<span class="env-countdown past">' + (_t ? _t('rc.milestone.ago_days').replace('{n}', Math.abs(days)) : Math.abs(days) + ' days ago') + '</span>';
+    }
+
+    function renderTimeline(view) {
+      var pool;
+      if (view === 'enterprise') pool = ENTERPRISE.filter(function(e){ return phases[e]; });
+      else if (view === 'legacy') pool = LEGACY.filter(function(e){ return phases[e]; });
+      else if (view === 'key') pool = ALL.filter(function(e){ return phases[e] && KEY_MILESTONES.indexOf(e) >= 0; });
+      else pool = allFilled;
+      if (pool.length === 0) pool = allFilled;
+
+      var currentIdx = -1;
+      pool.forEach(function(e, i) { if (phases[e] <= todayStr) currentIdx = i; });
+
+      var html = '';
+      pool.forEach(function(e, i) {
+        var d = phases[e], days = daysDiff(d);
+        var isPast = d < todayStr, isCurrent = i === currentIdx;
+        var cls = isCurrent ? 'env-step current' : (isPast ? 'env-step past' : 'env-step future');
+        if (i > 0) html += '<div class="env-connector' + (i <= currentIdx ? ' filled' : '') + '"></div>';
+        html += '<div class="' + cls + '">' +
+          '<div class="env-dot" style="background:' + (COLORS[e] || '#64748b') + ';"></div>' +
+          (isCurrent ? '<div class="env-current-marker">▼</div>' : '') +
+          '<div class="env-label">' + (LABELS[e] || e) + '</div>' +
+          '<div class="env-date">' + d + '</div>' +
+          formatCountdown(days) + '</div>';
+      });
+      timeline.innerHTML = html;
+    }
+
+    var viewSelect = document.getElementById('envViewSelect');
+    var initialView = viewSelect ? viewSelect.value : 'key';
+    renderTimeline(initialView);
+    window._rbMilestonesFilter = function(v) { renderTimeline(v); };
+
+    section.classList.remove('hidden');
+  } catch(e) { console.error('Milestones init:', e); }
+})();
+
