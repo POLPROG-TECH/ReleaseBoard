@@ -208,10 +208,12 @@
   }
 
   function _updateMonthGrid() {
+    var set = {};
+    selectedMonths.forEach(function(m) { set[m] = true; });
     var chips = $('rcMonthGrid').querySelectorAll('.rc-month-chip');
     chips.forEach(function(c) {
       var m = parseInt(c.dataset.month);
-      c.classList.toggle('selected', selectedMonths.indexOf(m) >= 0);
+      c.classList.toggle('selected', !!set[m]);
     });
   }
 

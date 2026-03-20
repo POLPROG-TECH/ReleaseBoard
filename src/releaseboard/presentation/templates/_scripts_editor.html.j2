@@ -533,8 +533,12 @@
   }
 
   async function validateDraft(){
-    const res = await fetch('/api/config/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cleanDraft(draft))});
-    const data = await res.json();
+    const cleaned = JSON.stringify(cleanDraft(draft));
+    const [valRes] = await Promise.all([
+      fetch('/api/config/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:cleaned}),
+      fetch('/api/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:cleaned})
+    ]);
+    const data = await valRes.json();
     validationErrors = data.errors || [];
     const allErrors = validationErrors.concat(validateEffectiveValues());
     if(allErrors.length > 0){ placeErrors(allErrors, null); }
@@ -545,7 +549,6 @@
       panel.innerHTML = '<div class="validation-ok">✓ '+esc(_t('ui.validation.config_valid'))+'</div>';
       _updateActionButtons(false, []);
     }
-    await fetch('/api/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(cleanDraft(draft))});
     const stRes = await fetch('/api/config');
     const stData = await stRes.json();
     updateUnsavedBadge(stData.has_unsaved_changes);

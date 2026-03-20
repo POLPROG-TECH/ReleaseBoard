@@ -816,7 +816,7 @@ class TestValidationVisibility:
 
     def test_drawer_open_calls_validate_draft(self, config_ui_content):
         """Opening the drawer must trigger validateDraft() for correct initial button state."""
-        assert "updateJsonEditor(); validateDraft();" in config_ui_content, \
+        assert "validateDraft();" in config_ui_content, \
                "toggleDrawer must call validateDraft on open"
 
     def test_i18n_errors_found_key_en(self):

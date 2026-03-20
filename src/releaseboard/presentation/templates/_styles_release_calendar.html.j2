@@ -31,7 +31,7 @@
 .rc-wizard-overlay {
   display: none; position: fixed; inset: 0; z-index: 10000;
   align-items: center; justify-content: center;
-  background: rgba(0,0,0,.45); backdrop-filter: blur(4px);
+  background: rgba(0,0,0,.5);
 }
 .rc-wizard-overlay.active { display: flex; }
 
@@ -39,8 +39,8 @@
 .rc-wizard-panel {
   background: var(--bg-primary); border-radius: 12px; width: 94vw; max-width: 920px;
   max-height: 92vh; display: flex; flex-direction: column;
-  box-shadow: 0 25px 60px rgba(0,0,0,.3); border: 1px solid var(--border);
-  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0,0,0,.25); border: 1px solid var(--border);
+  overflow: hidden; contain: layout style paint;
 }
 
 /* --- Header --- */
@@ -62,7 +62,7 @@
   display: flex; align-items: center; gap: 8px;
   padding: 12px 16px; font-size: .82rem; font-weight: 500;
   color: var(--text-tertiary); cursor: default;
-  border-bottom: 2px solid transparent; white-space: nowrap; transition: all .2s ease;
+  border-bottom: 2px solid transparent; white-space: nowrap; transition: color .2s ease, border-color .2s ease;
 }
 .rc-wizard-step-tab .rc-step-num {
   width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
@@ -84,7 +84,7 @@
   padding: 14px 24px; border-top: 1px solid var(--border);
   background: var(--bg-primary); flex-shrink: 0;
 }
-.rc-btn { padding: 8px 20px; border-radius: 8px; font-size: .85rem; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: var(--bg-primary); color: var(--text-primary); transition: all .15s ease; }
+.rc-btn { padding: 8px 20px; border-radius: 8px; font-size: .85rem; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: var(--bg-primary); color: var(--text-primary); transition: background-color .15s ease, color .15s ease, border-color .15s ease; }
 .rc-btn:hover { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }
 .rc-btn.primary { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }
 .rc-btn.primary:hover { opacity: .9; }
@@ -104,7 +104,7 @@
 .rc-month-chip {
   padding: 8px 4px; border-radius: 8px; border: 1.5px solid var(--border);
   text-align: center; font-size: .82rem; font-weight: 500; cursor: pointer;
-  background: var(--bg-primary); color: var(--text-secondary); transition: all .15s ease;
+  background: var(--bg-primary); color: var(--text-secondary); transition: background-color .15s ease, color .15s ease, border-color .15s ease;
 }
 .rc-month-chip:hover { border-color: var(--primary); background: var(--primary-light); }
 .rc-month-chip.selected { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }
@@ -247,7 +247,7 @@
 
 /* --- Export Actions --- */
 .rc-export-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
-.rc-export-btn { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--bg-primary); color: var(--text-primary); font-size: .88rem; font-weight: 600; cursor: pointer; transition: all .15s ease; }
+.rc-export-btn { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--bg-primary); color: var(--text-primary); font-size: .88rem; font-weight: 600; cursor: pointer; transition: background-color .15s ease, border-color .15s ease; }
 .rc-export-btn:hover { border-color: var(--primary); background: var(--primary-light); }
 .rc-export-btn .rc-export-icon { font-size: 1.3rem; }
 .rc-export-badge { font-size: .7rem; padding: 2px 6px; border-radius: 4px; background: var(--primary); color: var(--text-inverse); font-weight: 700; }
@@ -270,7 +270,7 @@
 /* --- Import Drop Zone --- */
 .rc-import-dropzone {
   border: 2px dashed var(--border); border-radius: 10px; padding: 32px 20px; text-align: center;
-  cursor: pointer; transition: all .15s ease; color: var(--text-tertiary); font-size: .88rem;
+  cursor: pointer; transition: border-color .15s ease, background-color .15s ease, color .15s ease; color: var(--text-tertiary); font-size: .88rem;
 }
 .rc-import-dropzone:hover { border-color: var(--primary); background: var(--primary-light); color: var(--text-primary); }
 .rc-import-dropzone.drag-over { border-color: var(--primary); background: var(--primary-light); }
@@ -287,7 +287,7 @@
 .rc-event-row {
   display: grid; grid-template-columns: 140px 120px 1fr auto; gap: 8px; align-items: center;
   padding: 8px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
-  background: var(--bg-primary); transition: all .15s ease;
+  background: var(--bg-primary); transition: border-color .15s ease;
 }
 .rc-event-row:hover { border-color: var(--primary); }
 .rc-event-row input, .rc-event-row select { padding: 6px 8px; border: 1.5px solid var(--border); border-radius: 6px; font-size: .82rem; background: var(--bg-primary); color: var(--text-primary); }
@@ -300,7 +300,7 @@
 }
 
 /* --- Midnight Theme Overrides --- */
-[data-theme="midnight"] .rc-wizard-panel { border-color: var(--border); box-shadow: 0 25px 60px rgba(0,0,0,.5); }
+[data-theme="midnight"] .rc-wizard-panel { border-color: var(--border); box-shadow: 0 12px 32px rgba(0,0,0,.4); }
 [data-theme="midnight"] .rc-btn.primary { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }
 [data-theme="midnight"] .rc-btn.primary:hover { background: color-mix(in srgb, var(--primary) 85%, #000); }
 [data-theme="midnight"] .rc-month-chip.selected { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }

@@ -16,7 +16,16 @@
     drawerOpen = !drawerOpen;
     document.getElementById('configDrawer').classList.toggle('open', drawerOpen);
     document.getElementById('drawerOverlay').classList.toggle('active', drawerOpen);
-    if(drawerOpen){ _drawerSnapshot = JSON.stringify(cleanDraft(draft)); populateForm(); updateJsonEditor(); validateDraft(); if(typeof trapFocus==='function'){setTimeout(function(){_drawerTrapRelease=trapFocus(document.getElementById('configDrawer'))},50);} }
+    if(drawerOpen){
+      _drawerSnapshot = JSON.stringify(cleanDraft(draft));
+      _drawerSnapshotParsed = null;
+      requestAnimationFrame(function(){
+        populateForm();
+        updateJsonEditor();
+        validateDraft();
+      });
+      if(typeof trapFocus==='function'){setTimeout(function(){_drawerTrapRelease=trapFocus(document.getElementById('configDrawer'))},50);}
+    }
   }
   function closeDrawer(){ drawerOpen=false; document.getElementById('configDrawer').classList.remove('open'); document.getElementById('drawerOverlay').classList.remove('active'); if(_drawerTrapRelease){_drawerTrapRelease();_drawerTrapRelease=null;} }
   function switchTab(tab){
@@ -36,10 +45,18 @@
 
   /* --- Draft snapshot for change detection --- */
   let _drawerSnapshot = null;
+  let _drawerSnapshotParsed = null;
+  function _getSnapshotParsed(){
+    if(!_drawerSnapshot) return null;
+    if(!_drawerSnapshotParsed){
+      try { _drawerSnapshotParsed = JSON.parse(_drawerSnapshot); } catch(e){ return null; }
+    }
+    return _drawerSnapshotParsed;
+  }
   function isRepoChanged(idx){
-    if(!_drawerSnapshot) return false;
+    const saved = _getSnapshotParsed();
+    if(!saved) return false;
     try {
-      const saved = JSON.parse(_drawerSnapshot);
       const savedRepo = saved.repositories && saved.repositories[idx];
       const currRepo = draft.repositories && draft.repositories[idx];
       if(!savedRepo && currRepo) return true;
@@ -48,9 +65,9 @@
     } catch(e){ return false; }
   }
   function isLayerChanged(layerId){
-    if(!_drawerSnapshot) return false;
+    const saved = _getSnapshotParsed();
+    if(!saved) return false;
     try {
-      const saved = JSON.parse(_drawerSnapshot);
       const savedL = (saved.layers||[]).find(l=>l.id===layerId);
       const currL = (draft.layers||[]).find(l=>l.id===layerId);
       if(!savedL && currL) return true;
