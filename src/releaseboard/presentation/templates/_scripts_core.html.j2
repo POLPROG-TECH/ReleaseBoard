@@ -2,11 +2,7 @@
 /* ============================================================
    ReleaseBoard — Core JavaScript
    ============================================================ */
-const REPO_DATA = {
-{% for repo in vm.all_repos %}
-  "{{ repo.name|e }}": {name:"{{ repo.name|e }}",url:"{{ repo.url|e }}",layer:"{{ repo.layer|e }}",layerLabel:"{{ repo.layer_label|e }}",status:"{{ repo.status }}",statusLabel:"{{ repo.status_label|e }}",statusColorBg:"{{ repo.status_color_bg }}",statusBadgeBg:"{{ repo.status_badge_bg }}",statusBadgeFg:"{{ repo.status_badge_fg }}",expectedBranch:"{{ repo.expected_branch|e }}",actualBranch:"{{ repo.actual_branch|e }}",namingValid:{{ 'true' if repo.naming_valid else 'false' }},isStale:{{ 'true' if repo.is_stale else 'false' }},lastActivity:"{{ repo.last_activity|e }}",firstActivity:"{{ repo.first_activity|e }}",lastAuthor:{{ repo.last_author|tojson }},lastMessage:{{ repo.last_message|tojson }},commitCount:"{{ repo.commit_count }}",freshness:"{{ repo.freshness|e }}",branchExists:{{ 'true' if repo.branch_exists else 'false' }},warnings:{{ repo.warnings|tojson }},notes:{{ repo.notes|tojson }},errorMessage:{{ repo.error_message|tojson }},errorKind:"{{ repo.error_kind|e }}",errorDetail:{{ repo.error_detail|tojson }},repoDefaultBranch:"{{ repo.repo_default_branch|e }}",repoVisibility:"{{ repo.repo_visibility|e }}",repoDescription:{{ repo.repo_description|tojson }},repoWebUrl:"{{ repo.repo_web_url|e }}",repoOwner:"{{ repo.repo_owner|e }}",dataSource:"{{ repo.data_source|e }}",latestTag:"{{ repo.latest_tag|e }}",latestTagSha:"{{ repo.latest_tag_sha|e }}",latestTagDate:"{{ repo.latest_tag_date|e }}",latestTagMessage:{{ repo.latest_tag_message|tojson }},isGitlab:{{ 'true' if repo.is_gitlab else 'false' }}},
-{% endfor %}
-};
+const REPO_DATA = {{ repo_data_json(vm.all_repos) }};
 
 /* --- Theme --- */
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);document.querySelectorAll('.theme-btn[data-theme]').forEach(b=>b.classList.toggle('active',b.dataset.theme===t));try{localStorage.setItem('rb-theme',t)}catch(e){}}

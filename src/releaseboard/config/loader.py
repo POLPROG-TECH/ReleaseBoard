@@ -131,8 +131,8 @@ def _build_settings(data: dict[str, Any] | None) -> SettingsConfig:
         output_path=data.get("output_path", "output/dashboard.html"),
         theme=data.get("theme", "system"),
         verbose=data.get("verbose", False),
-        timeout_seconds=_safe_int(data.get("timeout_seconds", 30), 30),
-        max_concurrent=_safe_int(data.get("max_concurrent", 5), 5),
+        timeout_seconds=_safe_int(data.get("timeout_seconds", 15), 15),
+        max_concurrent=_safe_int(data.get("max_concurrent", 10), 10),
         repository_root_url=data.get("repository_root_url", ""),
     )
 

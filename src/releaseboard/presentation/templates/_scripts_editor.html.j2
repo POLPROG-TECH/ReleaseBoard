@@ -591,12 +591,14 @@
       }
     }
     try {
-      await fetch('/api/config',{method:'PUT',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify(cleanDraft(draft))});
+      const config = await fetch('/api/config',{method:'PUT',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify(cleanDraft(draft))});
+      if(!config.ok){ showSaveErrors([_t('validation.save_failed','Failed to update configuration')]); return; }
       const res = await fetch('/api/config/save',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'}});
       const data = await res.json();
       if(data.ok){
         updateUnsavedBadge(false);
-        window.location.href = window.location.pathname + '?t=' + Date.now();
+        closeDrawer();
+        await startAnalysis();
       } else {
         showSaveErrors(data.errors);
       }

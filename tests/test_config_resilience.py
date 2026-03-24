@@ -496,10 +496,13 @@ class TestStructuredLogging:
 
     def test_get_logger_uses_structured_formatter(self):
         """GIVEN get_logger function."""
+        import logging
         logger = get_logger("test_module")
 
         """WHEN creating a logger."""
-        handlers = logger.handlers
+        # Handler lives on the root 'releaseboard' logger; child loggers propagate.
+        root = logging.getLogger("releaseboard")
+        handlers = root.handlers
 
         """THEN it uses StructuredFormatter."""
         assert len(handlers) > 0

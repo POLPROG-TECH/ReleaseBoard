@@ -23,7 +23,11 @@ class StructuredFormatter(logging.Formatter):
 
 def get_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(f"releaseboard.{name}")
-    if not logger.handlers:
+    # All output goes through the root ``releaseboard`` logger.
+    # Ensure it has at least one handler so messages aren't lost
+    # before configure_root_logger() runs (e.g. during imports).
+    root = logging.getLogger("releaseboard")
+    if not root.handlers:
         handler = logging.StreamHandler(sys.stderr)
         handler.setFormatter(
             StructuredFormatter(
@@ -31,7 +35,7 @@ def get_logger(name: str) -> logging.Logger:
                 datefmt="%Y-%m-%dT%H:%M:%S",
             )
         )
-        logger.addHandler(handler)
+        root.addHandler(handler)
     return logger
 
 

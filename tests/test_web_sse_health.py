@@ -560,12 +560,12 @@ class TestConcurrentAnalysis:
 
         class OrderTrackingProvider(GitProvider):
             def list_remote_branches(self, url: str, timeout: int = 30) -> list[str]:
-                execution_order.append(f"list:{url}")
                 return ["release/03.2025"]
 
             def get_branch_info(
                 self, url: str, branch: str, timeout: int = 30,
             ) -> BranchInfo | None:
+                execution_order.append(f"branch:{url}")
                 return BranchInfo(
                     name="release/03.2025", exists=True,
                     last_commit_date=datetime.now(tz=UTC),

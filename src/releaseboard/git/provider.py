@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import re
+import ssl
 from abc import ABC, abstractmethod
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from releaseboard.domain.models import BranchInfo
+
+logger = logging.getLogger(__name__)
 
 
 class GitProvider(ABC):
@@ -198,3 +203,15 @@ def classify_git_error(message: str, repo_url: str = "") -> GitErrorKind:
         return GitErrorKind.INVALID_URL
 
     return GitErrorKind.UNKNOWN
+
+
+def make_ssl_context() -> ssl.SSLContext:
+    """Build an SSL context that works in corporate proxy environments.
+
+    .. deprecated::
+        Use :func:`releaseboard.shared.network.make_ssl_context` directly.
+        This re-export is kept for backward compatibility.
+    """
+    from releaseboard.shared.network import make_ssl_context as _make
+
+    return _make()

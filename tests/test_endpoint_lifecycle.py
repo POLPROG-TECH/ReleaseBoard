@@ -344,7 +344,7 @@ class TestBuildSettingsDefensive:
         settings = _build_settings(data)
 
         """THEN the default timeout is used."""
-        assert settings.timeout_seconds == 30
+        assert settings.timeout_seconds == 15
 
     def test_non_numeric_max_concurrent(self):
         """GIVEN a None max_concurrent value."""
@@ -355,7 +355,7 @@ class TestBuildSettingsDefensive:
         settings = _build_settings(data)
 
         """THEN the default max_concurrent is used."""
-        assert settings.max_concurrent == 5
+        assert settings.max_concurrent == 10
 
     def test_valid_string_numbers_work(self):
         """GIVEN string representations of numeric settings."""

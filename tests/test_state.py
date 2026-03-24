@@ -333,7 +333,7 @@ class TestFillConfigDefaults:
         assert data["branding"]["primary_color"] == "#fb6400"
         assert "settings" in data
         assert data["settings"]["theme"] == "system"
-        assert data["settings"]["max_concurrent"] == 5
+        assert data["settings"]["max_concurrent"] == 10
         assert "layout" in data
         assert data["layers"] == []
 
@@ -353,8 +353,8 @@ class TestFillConfigDefaults:
         assert data["branding"]["secondary_color"] == "#002754e6"
         assert data["branding"]["primary_color"] == "#fb6400"
         assert data["settings"]["theme"] == "system"
-        assert data["settings"]["max_concurrent"] == 5
-        assert data["settings"]["timeout_seconds"] == 30
+        assert data["settings"]["max_concurrent"] == 10
+        assert data["settings"]["timeout_seconds"] == 15
 
     def test_zero_values_preserved(self):
         """Zero is a valid value for numeric fields and must not be backfilled."""

@@ -232,23 +232,34 @@ class AnalysisService:
                             repo_config.name, url,
                         )
                     else:
-                        branches = await asyncio.to_thread(
-                            self.git_provider.list_remote_branches,
-                            url,
-                            config.settings.timeout_seconds,
-                        )
-
+                        timeout = config.settings.timeout_seconds
                         pattern = config.resolve_branch_pattern(repo_config)
                         resolved = matcher.resolve(
                             pattern, config.release.target_month, config.release.target_year
                         )
 
+                        # Fast path: check the exact expected branch directly
+                        # instead of listing ALL branches first (saves 1 API call
+                        # per repo — the biggest performance win).
                         branch_info = await asyncio.to_thread(
                             self.git_provider.get_branch_info,
                             url,
                             resolved.resolved_name,
-                            config.settings.timeout_seconds,
+                            timeout,
                         )
+
+                        # If the exact branch exists, synthesize the branches
+                        # list from it.  Only fall back to the expensive
+                        # list_remote_branches call when the exact name is
+                        # missing (to check pattern variants like YY vs YYYY).
+                        if branch_info and branch_info.exists:
+                            branches = [resolved.resolved_name]
+                        else:
+                            branches = await asyncio.to_thread(
+                                self.git_provider.list_remote_branches,
+                                url,
+                                timeout,
+                            )
 
                         default_branch_info = None
                         matching = matcher.find_matching(branches, resolved)
@@ -257,7 +268,7 @@ class AnalysisService:
                                 default_branch_info = await asyncio.to_thread(
                                     self.git_provider.get_default_branch_info,
                                     url,
-                                    config.settings.timeout_seconds,
+                                    timeout,
                                 )
                             except Exception as default_exc:
                                 logger.debug(
@@ -270,34 +281,6 @@ class AnalysisService:
                             branch_info, default_branch_info,
                         )
 
-                        # GitLab tag enrichment — additive, failures are non-fatal
-                        if analysis.branch_exists and is_gitlab_url(url):
-                            analyzed_branch = (
-                                analysis.branch.name
-                                if analysis.branch
-                                else resolved.resolved_name
-                            )
-                            try:
-                                # Reuse the authenticated GitLab provider from
-                                # SmartGitProvider to avoid creating a bare one
-                                # that lacks the user-supplied token.
-                                gl: GitLabProvider
-                                if isinstance(self.git_provider, SmartGitProvider):
-                                    gl = self.git_provider.gitlab_provider
-                                else:
-                                    gl = GitLabProvider()
-                                tag_info = await asyncio.to_thread(
-                                    gl.get_latest_branch_tag,
-                                    url,
-                                    analyzed_branch,
-                                    config.settings.timeout_seconds,
-                                )
-                                analysis.latest_tag = tag_info
-                            except Exception as tag_exc:
-                                logger.debug(
-                                    "GitLab tag enrichment failed for %s: %s",
-                                    repo_config.name, tag_exc,
-                                )
 
                         progress.repos[i].status = "done"
                         progress.repos[i].readiness = analysis.status.value
@@ -350,6 +333,51 @@ class AnalysisService:
                 (i for i, r in enumerate(config.repositories) if r.name == a.name), 0
             )
         )
+
+        # --- GitLab tag enrichment (parallel, non-blocking) ---
+        # Runs after all repos are analyzed so it doesn't block the semaphore.
+        # All tag lookups fire concurrently — failures are silently ignored.
+        if not (self._cancel_event and self._cancel_event.is_set()):
+            tag_timeout = min(config.settings.timeout_seconds, 10)
+
+            async def _enrich_tag(analysis: RepositoryAnalysis) -> None:
+                if not analysis.branch_exists:
+                    return
+                repo_cfg = next(
+                    (r for r in config.repositories if r.name == analysis.name), None
+                )
+                if repo_cfg is None:
+                    return
+                url = config.resolve_repo_url(repo_cfg)
+                if not is_gitlab_url(url):
+                    return
+                analyzed_branch = (
+                    analysis.branch.name if analysis.branch else ""
+                )
+                if not analyzed_branch:
+                    return
+                try:
+                    gl: GitLabProvider
+                    if isinstance(self.git_provider, SmartGitProvider):
+                        gl = self.git_provider.gitlab_provider
+                    else:
+                        gl = GitLabProvider()
+                    tag_info = await asyncio.to_thread(
+                        gl.get_latest_branch_tag,
+                        url,
+                        analyzed_branch,
+                        tag_timeout,
+                    )
+                    analysis.latest_tag = tag_info
+                except Exception as tag_exc:
+                    logger.debug(
+                        "GitLab tag enrichment failed for %s: %s",
+                        analysis.name, tag_exc,
+                    )
+
+            tag_tasks = [_enrich_tag(a) for a in analyses]
+            if tag_tasks:
+                await asyncio.gather(*tag_tasks, return_exceptions=True)
 
         if self._cancel_event.is_set():
             cancelled = True

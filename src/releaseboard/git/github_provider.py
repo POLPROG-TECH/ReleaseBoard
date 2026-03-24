@@ -12,6 +12,7 @@ from urllib.parse import quote, urlparse
 
 from releaseboard.domain.models import BranchInfo
 from releaseboard.git.provider import GitAccessError, GitErrorKind, GitProvider
+from releaseboard.shared.network import make_ssl_context
 
 if TYPE_CHECKING:
     import ssl
@@ -134,17 +135,7 @@ class GitHubProvider(GitProvider):
 
     @staticmethod
     def _ssl_context() -> ssl.SSLContext:
-        """Build an SSL context using certifi bundle when available.
-
-        macOS Python often lacks proper default CA certs; certifi provides them.
-        """
-        import ssl
-
-        try:
-            import certifi
-            return ssl.create_default_context(cafile=certifi.where())
-        except ImportError:
-            return ssl.create_default_context()
+        return make_ssl_context()
 
     def _raise_for_status(
         self,

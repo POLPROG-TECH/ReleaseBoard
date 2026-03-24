@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 import time
 from typing import TYPE_CHECKING
-from urllib.parse import urlparse, urlunparse
 
 from releaseboard.git.github_provider import GitHubProvider, parse_github_url
 from releaseboard.git.gitlab_provider import GitLabProvider, is_gitlab_url
 from releaseboard.git.local_provider import LocalGitProvider
 from releaseboard.git.provider import GitAccessError, GitErrorKind, GitProvider
+from releaseboard.shared.network import inject_token_into_url
 
 if TYPE_CHECKING:
     from releaseboard.domain.models import BranchInfo
@@ -70,24 +70,10 @@ class SmartGitProvider(GitProvider):
         return ""
 
     def _auth_url(self, repo_url: str) -> str:
-        """Inject auth credentials into a URL for git CLI operations.
-
-        GitHub:  https://TOKEN@github.com/org/repo
-        GitLab:  https://oauth2:TOKEN@gitlab.example.com/group/project
-        """
+        """Inject auth credentials into a URL for git CLI operations."""
         token = self.get_token_for_url(repo_url)
-        if not token:
-            return repo_url
-        parsed = urlparse(repo_url)
-        if not parsed.scheme or not parsed.hostname:
-            return repo_url
-        if self._is_gitlab(repo_url):
-            netloc = f"oauth2:{token}@{parsed.hostname}"
-        else:
-            netloc = f"{token}@{parsed.hostname}"
-        if parsed.port:
-            netloc += f":{parsed.port}"
-        return urlunparse(parsed._replace(netloc=netloc))
+        provider = "github" if self._is_github(repo_url) else "gitlab"
+        return inject_token_into_url(repo_url, token, provider=provider)
 
     def update_tokens(
         self,

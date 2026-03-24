@@ -58,8 +58,8 @@ _SECTION_DEFAULTS: dict[str, dict[str, Any]] = {
         "output_path": "output/dashboard.html",
         "theme": "system",
         "verbose": False,
-        "timeout_seconds": 30,
-        "max_concurrent": 5,
+        "timeout_seconds": 15,
+        "max_concurrent": 10,
         "repository_root_url": "",
     },
     "layout": {

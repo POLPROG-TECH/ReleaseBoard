@@ -340,7 +340,7 @@ class TestBuildSettingsDefensive:
         settings = _build_settings(raw)
 
         """THEN it falls back to the default value."""
-        assert settings.timeout_seconds == 30  # default
+        assert settings.timeout_seconds == 15  # default
 
     def test_non_numeric_max_concurrent(self):
         """GIVEN settings with None max_concurrent."""
@@ -351,7 +351,7 @@ class TestBuildSettingsDefensive:
         settings = _build_settings(raw)
 
         """THEN it falls back to the default value."""
-        assert settings.max_concurrent == 5  # default
+        assert settings.max_concurrent == 10  # default
 
     def test_valid_string_numbers_work(self):
         """GIVEN settings with string representations of numbers."""
@@ -380,8 +380,8 @@ class TestBuildSettingsDefensive:
 
         """THEN all defaults are used."""
         assert settings.stale_threshold_days == 14
-        assert settings.timeout_seconds == 30
-        assert settings.max_concurrent == 5
+        assert settings.timeout_seconds == 15
+        assert settings.max_concurrent == 10
 
 
 class TestRateLimiterPruning:
@@ -494,8 +494,8 @@ class TestFillConfigDefaultsZero:
         fill_config_defaults(data)
 
         """THEN None values are replaced with defaults."""
-        assert data["settings"]["max_concurrent"] == 5
-        assert data["settings"]["timeout_seconds"] == 30
+        assert data["settings"]["max_concurrent"] == 10
+        assert data["settings"]["timeout_seconds"] == 15
 
     def test_empty_string_still_gets_default(self):
         """GIVEN config data with an empty string for theme."""

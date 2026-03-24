@@ -369,6 +369,9 @@ class TestConcurrentProgressSafety:
             def get_branch_info(
                 self, url: str, branch: str, timeout: int = 30
             ) -> BranchInfo | None:
+                idx = int(url.split("repo-")[1].split(".")[0])
+                if idx % 2 == 0:
+                    raise GitAccessError(url, "simulated failure")
                 return BranchInfo(
                     exists=True,
                     name="release/03.2025",

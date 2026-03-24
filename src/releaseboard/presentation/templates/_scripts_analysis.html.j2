@@ -40,20 +40,53 @@
     };
   }
 
+  /* --- Token persistence helpers --- */
+  function _getStoredTokens() {
+    try {
+      return {
+        github: localStorage.getItem('rb-github-token') || '',
+        gitlab: localStorage.getItem('rb-gitlab-token') || ''
+      };
+    } catch(e) { return {github:'',gitlab:''}; }
+  }
+  function _saveTokens(gh, gl) {
+    try {
+      if (gh) localStorage.setItem('rb-github-token', gh); else localStorage.removeItem('rb-github-token');
+      if (gl) localStorage.setItem('rb-gitlab-token', gl); else localStorage.removeItem('rb-gitlab-token');
+    } catch(e) {}
+  }
+  function _hasStoredTokens() {
+    var t = _getStoredTokens();
+    return !!(t.github || t.gitlab);
+  }
+
+  /* Restore server-side tokens from localStorage on page load.
+     This ensures the server has the token even after restart/reload. */
+  async function _restoreTokensOnServer() {
+    var t = _getStoredTokens();
+    if (!t.github && !t.gitlab) return;
+    try {
+      await fetch('/api/tokens', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+        body: JSON.stringify({github_token: t.github, gitlab_token: t.gitlab})
+      });
+    } catch(e) {}
+  }
+
   async function startAnalysis(){
     setAnalysisPhase('starting');
     _sseReconnectAttempts = 0;
     connectSSE();
     /* Send stored tokens (if any) so the server can re-apply them
-       even after a page reload.  Tokens live in sessionStorage only
-       — never persisted to disk. */
+       even after a page reload.  Tokens are persisted in localStorage
+       so they survive browser restarts. */
     var _body = undefined;
     var _hdrs = {'X-Requested-With':'XMLHttpRequest'};
     try {
-      var _ght = sessionStorage.getItem('rb-github-token') || '';
-      var _glt = sessionStorage.getItem('rb-gitlab-token') || '';
-      if (_ght || _glt) {
-        _body = JSON.stringify({github_token: _ght, gitlab_token: _glt});
+      var t = _getStoredTokens();
+      if (t.github || t.gitlab) {
+        _body = JSON.stringify({github_token: t.github, gitlab_token: t.gitlab});
         _hdrs['Content-Type'] = 'application/json';
       }
     } catch(e){}

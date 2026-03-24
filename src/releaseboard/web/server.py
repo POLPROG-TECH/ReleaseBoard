@@ -634,6 +634,29 @@ def create_app(
 
     # --- Analysis API ---
 
+    @app.post("/api/tokens")
+    async def restore_tokens(request: Request) -> JSONResponse:
+        """Restore git provider tokens from the browser.
+
+        Called on page load to re-apply tokens that the user previously
+        entered in the wizard.  Tokens are stored in the browser's
+        ``localStorage`` and sent here so the server-side git provider
+        uses authenticated access even after a server restart.
+        """
+        body = await _read_json_body(request)
+        gh_tok = (body.get("github_token") or "").strip() or None
+        gl_tok = (body.get("gitlab_token") or "").strip() or None
+        if isinstance(git_provider, SmartGitProvider) and (gh_tok or gl_tok):
+            git_provider.update_tokens(
+                github_token=gh_tok, gitlab_token=gl_tok,
+            )
+            logger.info(
+                "Tokens restored from browser (GitHub=%s, GitLab=%s)",
+                "set" if gh_tok else "not set",
+                "set" if gl_tok else "not set",
+            )
+        return JSONResponse({"ok": True})
+
     @app.post("/api/analyze")
     async def trigger_analysis(request: Request) -> JSONResponse:
         """Trigger a new analysis run.

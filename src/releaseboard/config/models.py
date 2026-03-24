@@ -110,8 +110,8 @@ class SettingsConfig:
     output_path: str = "output/dashboard.html"
     theme: str = "system"
     verbose: bool = False
-    timeout_seconds: int = 30
-    max_concurrent: int = 5
+    timeout_seconds: int = 15
+    max_concurrent: int = 10
     repository_root_url: str = ""
 
 

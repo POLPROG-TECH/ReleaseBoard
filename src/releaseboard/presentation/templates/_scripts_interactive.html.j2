@@ -21,6 +21,8 @@ const RB = (function(){
     schema = sData.schema || sData;
     populateForm();
     initJsonAutocomplete();
+    /* Restore tokens on server from localStorage (survives browser/server restarts) */
+    await _restoreTokensOnServer();
   }
 
   {% include '_scripts_config_ui.html.j2' %}

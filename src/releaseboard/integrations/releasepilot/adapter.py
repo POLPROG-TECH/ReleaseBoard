@@ -45,6 +45,7 @@ from releaseboard.integrations.releasepilot.models import (
     ReleasePrepResult,
 )
 from releaseboard.integrations.releasepilot.validation import validate_prep_request
+from releaseboard.shared.network import inject_token_into_url
 
 logger = logging.getLogger(__name__)
 
@@ -60,22 +61,10 @@ def _is_remote_url(url: str) -> bool:
 def _auth_clone_url(repo_url: str, token: str) -> str:
     """Embed *token* into the clone URL for authenticated HTTPS access.
 
-    GitHub:  https://<token>@github.com/owner/repo
-    GitLab:  https://oauth2:<token>@gitlab.example.com/group/repo
+    .. deprecated::
+        Use :func:`releaseboard.shared.network.inject_token_into_url` directly.
     """
-    if not token:
-        return repo_url
-    parsed = urlparse(repo_url)
-    if parsed.scheme not in ("http", "https"):
-        return repo_url
-    host = parsed.hostname or ""
-    if "github" in host:
-        netloc = f"{token}@{parsed.hostname}"
-    else:
-        netloc = f"oauth2:{token}@{parsed.hostname}"
-    if parsed.port:
-        netloc += f":{parsed.port}"
-    return parsed._replace(netloc=netloc).geturl()
+    return inject_token_into_url(repo_url, token)
 
 
 def _shallow_clone(

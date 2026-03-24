@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 
 from releaseboard.domain.models import BranchInfo, TagInfo
 from releaseboard.git.provider import GitAccessError, GitErrorKind, GitProvider
+from releaseboard.shared.network import make_ssl_context
 
 logger = logging.getLogger(__name__)
 
@@ -91,14 +92,13 @@ class GitLabProvider(GitProvider):
         return headers
 
     def _api_base(self, host: str) -> str:
-        """Build the API base URL, embedding token credentials when available.
+        """Build the API base URL.
 
-        Uses ``https://oauth2:TOKEN@host/api/v4`` so that authentication
-        works even through corporate proxies that strip custom headers
-        like ``PRIVATE-TOKEN``.
+        Authentication is handled via the ``PRIVATE-TOKEN`` header
+        (see ``_headers()``).  Embedded URL credentials
+        (``oauth2:TOKEN@host``) are not used because Python 3.13+
+        rejects them as invalid URLs.
         """
-        if self._token:
-            return f"https://oauth2:{self._token}@{host}/api/v4"
         return f"https://{host}/api/v4"
 
     def _raise_for_status(
@@ -150,11 +150,7 @@ class GitLabProvider(GitProvider):
 
     @staticmethod
     def _ssl_context() -> ssl.SSLContext:
-        try:
-            import certifi
-            return ssl.create_default_context(cafile=certifi.where())
-        except ImportError:
-            return ssl.create_default_context()
+        return make_ssl_context()
 
     def _get_ssl_context(self) -> ssl.SSLContext:
         """Return a cached SSL context (created once per provider instance)."""
@@ -163,17 +159,17 @@ class GitLabProvider(GitProvider):
         return self._ssl_ctx
 
     def _get_json(self, url: str, timeout: int) -> tuple[Any, int]:
-        """GET request with retry for transient errors.
+        """GET request with retry for transient server errors.
 
         Returns (parsed_json, http_status). (None, 0) on network error.
-        Retries up to 2 times on HTTP 502/503/504 or network failures.
+        Retries up to 1 time on HTTP 502/503/504 (gateway errors).
+        Non-transient failures (DNS, SSL, timeout, 4xx) fail immediately.
         """
         import time as _time
 
         ctx = self._get_ssl_context()
-        last_data, last_status = None, 0
 
-        for attempt in range(3):
+        for attempt in range(2):
             req = urllib.request.Request(url, headers=self._headers())
             try:
                 with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
@@ -185,19 +181,18 @@ class GitLabProvider(GitProvider):
                     last_data, last_status = body, exc.code
                 except Exception:
                     last_data, last_status = None, exc.code
-                if exc.code in (502, 503, 504) and attempt < 2:
-                    _time.sleep(0.5 * (2 ** attempt))
+                # Only retry on transient gateway errors
+                if exc.code in (502, 503, 504) and attempt < 1:
+                    _time.sleep(0.5)
                     continue
                 return last_data, last_status
             except Exception as exc:
                 logger.debug("GitLab API request failed for %s: %s", url, exc)
-                last_data, last_status = None, 0
-                if attempt < 2:
-                    _time.sleep(0.5 * (2 ** attempt))
-                    continue
-                return last_data, last_status
+                # Network errors (DNS, SSL, timeout) won't resolve with
+                # a quick retry — fail immediately to avoid wasted time.
+                return None, 0
 
-        return last_data, last_status
+        return None, 0
 
     def list_group_repos(
         self, api_base: str, group_path: str, timeout: int = 30
@@ -393,24 +388,12 @@ class GitLabProvider(GitProvider):
     ) -> TagInfo | None:
         """Return the latest tag whose target commit is reachable from *branch_name*.
 
-        Tags in Git are repository-level; they are not scoped to branches.
-        This method derives the "latest relevant tag" for a branch by:
+        Performance: fetches 1 page of 10 tags (newest first) and checks
+        branch reachability for up to 5 candidates.  Uses a shorter timeout
+        for the refs check (non-critical enrichment).  Stops on first match.
 
-        1. Fetching tags ordered by most recently updated (newest first).
-        2. For each candidate tag, querying which branches contain that tag's
-           target commit (``/commits/{sha}/refs?type=branch``).
-        3. Returning the first tag whose target commit is on *branch_name*.
-
-        "Latest" is determined by the tagged commit's ``committed_date``.
-        Only the first 40 tags are inspected (2 pages × 20) to keep API
-        calls bounded.  For each tag, one additional API call is made to
-        check branch reachability, but we stop at the first match.
-
-        Returns ``None`` when:
-        - The URL is not a recognisable GitLab project.
-        - No tags exist in the repository.
-        - None of the inspected tags belong to the given branch.
-        - The API is unreachable or returns errors.
+        Returns ``None`` when no matching tag is found or the API is
+        unreachable.
         """
         parsed = parse_gitlab_url(repo_url)
         if not parsed:
@@ -419,25 +402,24 @@ class GitLabProvider(GitProvider):
         host, namespace, project = parsed
         encoded_project = urllib.parse.quote(f"{namespace}/{project}", safe="")
         api_base = self._api_base(host)
-        tags_data: list[dict] = []
-        for page in (1, 2):
-            url = (
-                f"{api_base}/projects/{encoded_project}"
-                f"/repository/tags?order_by=updated&sort=desc"
-                f"&per_page=20&page={page}"
-            )
-            data, status = self._get_json(url, timeout)
-            if status >= 400 or not isinstance(data, list):
-                break
-            tags_data.extend(data)
-            if len(data) < 20:
-                break
 
-        if not tags_data:
-            logger.debug("No tags found for %s/%s", namespace, project)
+        # Fetch only 1 page of 10 tags — enough for most projects
+        url = (
+            f"{api_base}/projects/{encoded_project}"
+            f"/repository/tags?order_by=updated&sort=desc"
+            f"&per_page=10&page=1"
+        )
+        tags_data, status = self._get_json(url, timeout)
+        if status >= 400 or not isinstance(tags_data, list) or not tags_data:
+            if not tags_data:
+                logger.debug("No tags found for %s/%s", namespace, project)
             return None
 
-        # Check each tag for branch reachability (stop on first match)
+        # Use a shorter timeout for refs checks (non-critical enrichment)
+        refs_timeout = min(timeout, 8)
+        max_checks = 5  # Stop after checking 5 tags
+
+        checked = 0
         for tag in tags_data:
             if not isinstance(tag, dict):
                 continue
@@ -447,14 +429,17 @@ class GitLabProvider(GitProvider):
             if not target_sha:
                 continue
 
+            checked += 1
+            if checked > max_checks:
+                break
+
             # Ask GitLab which branches contain this commit
             refs_url = (
                 f"{api_base}/projects/{encoded_project}"
                 f"/repository/commits/{target_sha}/refs?type=branch"
             )
-            refs_data, refs_status = self._get_json(refs_url, timeout)
+            refs_data, refs_status = self._get_json(refs_url, refs_timeout)
             if refs_status >= 400 or not isinstance(refs_data, list):
-                # API error — skip this tag but try the next one
                 logger.debug(
                     "Cannot check refs for tag %s (SHA %s): HTTP %d",
                     tag_name, target_sha, refs_status,
@@ -467,7 +452,6 @@ class GitLabProvider(GitProvider):
                 if isinstance(ref, dict) and ref.get("type") == "branch"
             }
             if branch_name in branch_names:
-                # Found the latest relevant tag
                 committed_date = None
                 raw_date = commit_obj.get("committed_date") or commit_obj.get("created_at")
                 if raw_date:
@@ -492,6 +476,6 @@ class GitLabProvider(GitProvider):
 
         logger.debug(
             "No tags reachable from branch '%s' in %s/%s (checked %d tags)",
-            branch_name, namespace, project, len(tags_data),
+            branch_name, namespace, project, checked,
         )
         return None

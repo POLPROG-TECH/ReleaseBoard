@@ -431,18 +431,31 @@ class TestDashboardTagColumn:
 
 class TestDetailModalTagSection:
     def test_repo_data_includes_tag_fields(self):
-        """REPO_DATA JS object must include tag fields."""
-        import pathlib
-        tmpl = (
-            pathlib.Path(__file__).parent.parent / "src" / "releaseboard"
-            / "presentation" / "templates" / "_scripts_core.html.j2"
+        """REPO_DATA JS object must include tag fields via repo_data_json."""
+        from releaseboard.presentation.renderer import _repo_data_json
+        from releaseboard.presentation.view_models import RepoViewModel
+
+        repo = RepoViewModel(
+            name="test-repo", url="https://gitlab.com/org/test-repo",
+            layer="ui", layer_label="Frontend", status="ready",
+            status_label="Ready", status_color_bg="#22c55e",
+            status_color_fg="#fff", status_badge_bg="#22c55e",
+            status_badge_fg="#fff", expected_branch="release/03.2025",
+            actual_branch="release/03.2025", naming_valid=True,
+            is_stale=False, last_activity="2025-03-01", last_activity_raw="",
+            first_activity="", last_author="", last_message="",
+            commit_count="1", freshness="Fresh", warnings=[], notes=[],
+            error_message="", error_kind="", error_detail="",
+            branch_exists=True, latest_tag="v1.0.0",
+            latest_tag_sha="abc123", latest_tag_date="2025-03-01",
+            latest_tag_message="Release v1.0.0", is_gitlab=True,
         )
-        content = tmpl.read_text()
-        assert "latestTag:" in content
-        assert "latestTagSha:" in content
-        assert "latestTagDate:" in content
-        assert "latestTagMessage:" in content
-        assert "isGitlab:" in content
+        output = _repo_data_json([repo])
+        assert '"latestTag"' in output
+        assert '"latestTagSha"' in output
+        assert '"latestTagDate"' in output
+        assert '"latestTagMessage"' in output
+        assert '"isGitlab"' in output
 
     def test_detail_modal_has_tag_section(self):
         """Detail modal JS must render a GitLab tag section."""
