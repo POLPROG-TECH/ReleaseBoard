@@ -51,8 +51,23 @@ class SecurityHeadersMiddleware:
         # Allow embedding in iframes when integrated into a portal shell.
         # Set RELEASEBOARD_ALLOW_FRAMING=true to relax frame-ancestors.
         self._allow_framing = os.getenv("RELEASEBOARD_ALLOW_FRAMING", "").lower() in (
-            "1", "true", "yes",
+            "1",
+            "true",
+            "yes",
         )
+        # Portal origin(s) allowed to embed this app in an iframe.
+        # Read from RELEASEBOARD_CORS_ORIGINS (comma-separated).
+        self._frame_ancestors = self._build_frame_ancestors()
+
+    def _build_frame_ancestors(self) -> str:
+        """Build frame-ancestors value from environment."""
+        if not self._allow_framing:
+            return "'none'"
+        origins_env = os.getenv("RELEASEBOARD_CORS_ORIGINS", "").strip()
+        if origins_env:
+            origins = " ".join(o.strip() for o in origins_env.split(",") if o.strip())
+            return f"'self' {origins}"
+        return "'self'"
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -63,17 +78,13 @@ class SecurityHeadersMiddleware:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
                 headers["x-content-type-options"] = "nosniff"
-                if self._allow_framing:
-                    headers["x-frame-options"] = "SAMEORIGIN"
-                else:
+                if not self._allow_framing:
                     headers["x-frame-options"] = "DENY"
                 headers["referrer-policy"] = "strict-origin-when-cross-origin"
-                headers["permissions-policy"] = (
-                    "camera=(), microphone=(), geolocation=()"
-                )
+                headers["permissions-policy"] = "camera=(), microphone=(), geolocation=()"
                 headers["x-xss-protection"] = "1; mode=block"
                 if "content-security-policy" not in headers:
-                    frame_policy = "'self'" if self._allow_framing else "'none'"
+                    frame_policy = self._frame_ancestors
                     headers["content-security-policy"] = (
                         "default-src 'self'; "
                         "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
@@ -116,7 +127,11 @@ class RequestLoggingMiddleware:
             method = scope.get("method", "-")
             path = scope.get("path", "-")
             logger.info(
-                "%s %s %d %.1fms", method, path, status_code, duration_ms,
+                "%s %s %d %.1fms",
+                method,
+                path,
+                status_code,
+                duration_ms,
             )
 
 
@@ -179,8 +194,7 @@ class RateLimitMiddleware:
         if len(self._windows) > 10_000:
             cutoff = now - 60
             stale_ips = [
-                ip for ip, times in self._windows.items()
-                if not times or times[-1] < cutoff
+                ip for ip, times in self._windows.items() if not times or times[-1] < cutoff
             ]
             for ip in stale_ips:
                 del self._windows[ip]
@@ -242,16 +256,20 @@ class CSRFMiddleware:
             if xrw != "XMLHttpRequest" and not path.startswith("/api/health"):
                 # Fall back to Referer check for same-origin form submissions
                 referer = _get_header(scope, "referer")
-                if referer and host and (
-                    not referer.startswith(f"http://{host}")
-                    and not referer.startswith(f"https://{host}")
+                if (
+                    referer
+                    and host
+                    and (
+                        not referer.startswith(f"http://{host}")
+                        and not referer.startswith(f"https://{host}")
+                    )
                 ):
-                        resp = JSONResponse(
-                            {"ok": False, "error": "CSRF validation failed"},
-                            status_code=403,
-                        )
-                        await resp(scope, receive, send)
-                        return
+                    resp = JSONResponse(
+                        {"ok": False, "error": "CSRF validation failed"},
+                        status_code=403,
+                    )
+                    await resp(scope, receive, send)
+                    return
 
         await self.app(scope, receive, send)
 

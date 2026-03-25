@@ -55,6 +55,7 @@ _MAX_BODY_BYTES = 1_048_576
 
 class _InvalidContentTypeError(Exception):
     """Raised when a request has an unexpected Content-Type."""
+
     def __init__(self, content_type: str) -> None:
         self.content_type = content_type
         super().__init__(f"Expected application/json, got: {content_type}")
@@ -62,6 +63,7 @@ class _InvalidContentTypeError(Exception):
 
 class _BodyTooLargeError(Exception):
     """Raised when a request body exceeds the size limit."""
+
     def __init__(self, size: int) -> None:
         self.size = size
         super().__init__(f"Request body too large: {size} bytes (max {_MAX_BODY_BYTES})")
@@ -69,6 +71,7 @@ class _BodyTooLargeError(Exception):
 
 class _InvalidJSONError(Exception):
     """Raised when a request body contains malformed JSON."""
+
     def __init__(self, detail: str) -> None:
         self.detail = detail
         super().__init__(f"Invalid JSON: {detail}")
@@ -178,15 +181,14 @@ def create_app(
 
     @app.exception_handler(_InvalidContentTypeError)
     async def invalid_content_type_handler(
-        request: Request, exc: _InvalidContentTypeError,
+        request: Request,
+        exc: _InvalidContentTypeError,
     ) -> JSONResponse:
         return JSONResponse(
             {
                 "ok": False,
                 "error": (
-                    f"Unsupported Content-Type: "
-                    f"{exc.content_type}. "
-                    f"Expected application/json"
+                    f"Unsupported Content-Type: {exc.content_type}. Expected application/json"
                 ),
             },
             status_code=415,
@@ -197,11 +199,7 @@ def create_app(
         return JSONResponse(
             {
                 "ok": False,
-                "error": (
-                    f"Request body too large "
-                    f"({exc.size} bytes). "
-                    f"Max: {_MAX_BODY_BYTES}"
-                ),
+                "error": (f"Request body too large ({exc.size} bytes). Max: {_MAX_BODY_BYTES}"),
             },
             status_code=413,
         )
@@ -320,16 +318,22 @@ def create_app(
 
         if state.analysis_result:
             vm = build_dashboard_view_model(
-                config, state.analysis_result.analyses, state.analysis_result.metrics,
+                config,
+                state.analysis_result.analyses,
+                state.analysis_result.metrics,
                 locale=locale,
                 config_raw=state.config_state.draft_raw,
             )
         else:
             from releaseboard.analysis.metrics import DashboardMetrics
+
             empty_metrics = DashboardMetrics()
             empty_metrics.total = len(config.repositories)
             vm = build_dashboard_view_model(
-                config, [], empty_metrics, locale=locale,
+                config,
+                [],
+                empty_metrics,
+                locale=locale,
                 config_raw=state.config_state.draft_raw,
             )
 
@@ -342,18 +346,20 @@ def create_app(
             _heading = t("error.dashboard_rendering", locale=locale) or "Dashboard Rendering Error"
             _body = (
                 t("error.check_logs", locale=locale)
-                or "The dashboard could not be rendered."
-                " Please check the server logs for details."
+                or "The dashboard could not be rendered. Please check the server logs for details."
             )
             html = (
                 f"<!DOCTYPE html><html><head><title>{_title}</title></head>"
                 f"<body><h1>{_heading}</h1>"
                 f"<p>{_body}</p></body></html>"
             )
-        return HTMLResponse(html, headers={
-            "Cache-Control": "no-store, no-cache, must-revalidate",
-            "Content-Language": locale,
-        })
+        return HTMLResponse(
+            html,
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Content-Language": locale,
+            },
+        )
 
     # --- First-Run Setup ---
 
@@ -361,26 +367,34 @@ def create_app(
         locale = _req_locale(request)
         renderer = DashboardRenderer()
         html = renderer.render_first_run(locale=locale, config_path=str(config_path))
-        return HTMLResponse(html, headers={
-            "Cache-Control": "no-store",
-            "Content-Language": locale,
-        })
+        return HTMLResponse(
+            html,
+            headers={
+                "Cache-Control": "no-store",
+                "Content-Language": locale,
+            },
+        )
 
     @app.get("/api/examples")
     async def list_examples() -> JSONResponse:
         """List available example configurations."""
-        examples_dir = Path(__file__).resolve().parent.parent.parent.parent / "examples"
+        # Try package-internal examples first, then repo root
+        pkg_examples = Path(__file__).resolve().parent.parent / "examples"
+        repo_examples = Path(__file__).resolve().parent.parent.parent.parent / "examples"
+        examples_dir = pkg_examples if pkg_examples.exists() else repo_examples
         examples: list[dict[str, Any]] = []
         if examples_dir.exists():
             for f in sorted(examples_dir.glob("*.json")):
                 try:
                     data = json.loads(f.read_text(encoding="utf-8"))
-                    examples.append({
-                        "name": f.name,
-                        "title": data.get("release", {}).get("name", f.stem),
-                        "repos": len(data.get("repositories", [])),
-                        "layers": len(data.get("layers", [])),
-                    })
+                    examples.append(
+                        {
+                            "name": f.name,
+                            "title": data.get("release", {}).get("name", f.stem),
+                            "repos": len(data.get("repositories", [])),
+                            "layers": len(data.get("layers", [])),
+                        }
+                    )
                 except (json.JSONDecodeError, KeyError):
                     pass
         return JSONResponse({"ok": True, "examples": examples})
@@ -395,6 +409,7 @@ def create_app(
 
         if mode == "empty":
             from datetime import datetime as _dt
+
             now = _dt.now()
             config_data = {
                 "release": {
@@ -408,11 +423,11 @@ def create_app(
         elif mode == "example":
             example_name = body.get("example", "config.json")
             safe_name = Path(example_name).name
-            example_path = (
-                Path(__file__).resolve().parent.parent.parent.parent
-                / "examples"
-                / safe_name
-            )
+            # Try package-internal examples first, then repo root
+            pkg_examples = Path(__file__).resolve().parent.parent / "examples"
+            repo_examples = Path(__file__).resolve().parent.parent.parent.parent / "examples"
+            examples_base = pkg_examples if pkg_examples.exists() else repo_examples
+            example_path = examples_base / safe_name
             if not example_path.exists():
                 return JSONResponse(
                     {"ok": False, "error": f"Example '{safe_name}' not found"},
@@ -426,6 +441,7 @@ def create_app(
 
         # Fill defaults and validate
         from releaseboard.web.state import fill_config_defaults
+
         fill_config_defaults(config_data)
         errors = validate_config(config_data) + validate_layer_references(config_data)
         if errors:
@@ -433,9 +449,11 @@ def create_app(
 
         # Write config file (atomic: temp + rename to avoid corruption on crash)
         import tempfile as _tmpmod
+
         json_text = json.dumps(config_data, indent=2, ensure_ascii=False) + "\n"
         tmp_fd, tmp_name = _tmpmod.mkstemp(
-            dir=str(config_path.parent), suffix=".tmp",
+            dir=str(config_path.parent),
+            suffix=".tmp",
         )
         try:
             with open(tmp_fd, "w", encoding="utf-8") as tmp_f:
@@ -459,9 +477,7 @@ def create_app(
             return JSONResponse({"ok": False, "error": "No configuration loaded"}, status_code=503)
         data = state.config_state.to_api_dict()
         data["etag"] = state.config_state.config_etag
-        return JSONResponse(
-            data, headers={"ETag": f'"{state.config_state.config_etag}"'}
-        )
+        return JSONResponse(data, headers={"ETag": f'"{state.config_state.config_etag}"'})
 
     @app.put("/api/config")
     async def update_config(request: Request) -> JSONResponse:
@@ -475,11 +491,13 @@ def create_app(
                 status_code=400,
             )
         errors = state.update_draft(body)
-        return JSONResponse({
-            "ok": len(errors) == 0,
-            "errors": errors,
-            "has_unsaved_changes": state.config_state.has_unsaved_changes,
-        })
+        return JSONResponse(
+            {
+                "ok": len(errors) == 0,
+                "errors": errors,
+                "has_unsaved_changes": state.config_state.has_unsaved_changes,
+            }
+        )
 
     @app.post("/api/config/save")
     async def save_config(request: Request) -> JSONResponse:
@@ -516,11 +534,13 @@ def create_app(
         if state is None:
             return JSONResponse({"ok": False, "error": "No configuration loaded"}, status_code=503)
         state.reset_draft()
-        return JSONResponse({
-            "ok": True,
-            "draft": state.get_draft(),
-            "has_unsaved_changes": False,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "draft": state.get_draft(),
+                "has_unsaved_changes": False,
+            }
+        )
 
     @app.post("/api/config/validate")
     async def validate_config_endpoint(request: Request) -> JSONResponse:
@@ -582,6 +602,7 @@ def create_app(
             return JSONResponse({"ok": False}, 503)
         body = await _read_json_body(request)
         import re as _re
+
         _hex_re = _re.compile(r"^#[0-9a-fA-F]{6,8}$")
         draft = state.config_state.draft_raw
         branding = draft.setdefault("branding", {})
@@ -625,12 +646,14 @@ def create_app(
             return JSONResponse({"ok": False, "error": "No configuration loaded"}, status_code=503)
         body = await _read_json_body(request)
         errors = state.import_config(body)
-        return JSONResponse({
-            "ok": len(errors) == 0,
-            "errors": errors,
-            "draft": state.get_draft(),
-            "has_unsaved_changes": state.config_state.has_unsaved_changes,
-        })
+        return JSONResponse(
+            {
+                "ok": len(errors) == 0,
+                "errors": errors,
+                "draft": state.get_draft(),
+                "has_unsaved_changes": state.config_state.has_unsaved_changes,
+            }
+        )
 
     # --- Analysis API ---
 
@@ -648,7 +671,8 @@ def create_app(
         gl_tok = (body.get("gitlab_token") or "").strip() or None
         if isinstance(git_provider, SmartGitProvider) and (gh_tok or gl_tok):
             git_provider.update_tokens(
-                github_token=gh_tok, gitlab_token=gl_tok,
+                github_token=gh_tok,
+                gitlab_token=gl_tok,
             )
             logger.info(
                 "Tokens restored from browser (GitHub=%s, GitLab=%s)",
@@ -688,7 +712,8 @@ def create_app(
             gl_tok = (body.get("gitlab_token") or "").strip() or None
             if gh_tok or gl_tok:
                 git_provider.update_tokens(
-                    github_token=gh_tok, gitlab_token=gl_tok,
+                    github_token=gh_tok,
+                    gitlab_token=gl_tok,
                 )
 
         async def _run() -> None:
@@ -746,8 +771,7 @@ def create_app(
         # Merge result into existing analysis result
         if state.analysis_result:
             new_list = [
-                analysis if a.name == repo_name else a
-                for a in state.analysis_result.analyses
+                analysis if a.name == repo_name else a for a in state.analysis_result.analyses
             ]
             # If the repo wasn't in the existing list, append it
             if not any(a.name == repo_name for a in state.analysis_result.analyses):
@@ -755,20 +779,24 @@ def create_app(
             layer_labels = {layer.id: layer.label for layer in config.layers}
             state.analysis_result.analyses = new_list
             state.analysis_result.metrics = compute_dashboard_metrics(
-                new_list, layer_labels,
+                new_list,
+                layer_labels,
             )
             import datetime as _dtmod
+
             state.analysis_result.timestamp = _dtmod.datetime.now(
                 tz=_dtmod.UTC,
             )
 
-        return JSONResponse({
-            "ok": True,
-            "name": analysis.name,
-            "status": analysis.status.value,
-            "branch_exists": analysis.branch_exists,
-            "error_message": analysis.error_message or "",
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "name": analysis.name,
+                "status": analysis.status.value,
+                "branch_exists": analysis.branch_exists,
+                "error_message": analysis.error_message or "",
+            }
+        )
 
     @app.post("/api/analyze/cancel")
     async def cancel_analysis(request: Request) -> JSONResponse:
@@ -837,54 +865,56 @@ def create_app(
             )
 
         result = state.analysis_result
-        return JSONResponse({
-            "ok": True,
-            "timestamp": result.timestamp.isoformat(),
-            "progress": result.progress.to_dict(),
-            "metrics": {
-                "total": result.metrics.total,
-                "ready": result.metrics.ready,
-                "missing": result.metrics.missing,
-                "invalid_naming": result.metrics.invalid_naming,
-                "stale": result.metrics.stale,
-                "error": result.metrics.error,
-                "warning": result.metrics.warning,
-                "readiness_pct": result.metrics.readiness_pct,
-            },
-            "analyses": [
-                {
-                    "name": a.name,
-                    "layer": a.layer,
-                    "status": a.status.value,
-                    "status_label": a.status.localized_label(locale),
-                    "expected_branch": a.expected_branch_name,
-                    "branch_exists": a.branch_exists,
-                    "actual_branch": a.branch.name if a.branch and a.branch.exists else None,
-                    "naming_valid": a.naming_valid,
-                    "is_stale": a.is_stale,
-                    "error_message": a.error_message,
-                    "error_kind": a.error_kind,
-                    "error_detail": a.error_detail,
-                    "last_commit_sha": a.branch.last_commit_sha if a.branch else None,
-                    "last_commit_author": a.branch.last_commit_author if a.branch else None,
-                    "last_commit_message": a.branch.last_commit_message if a.branch else None,
-                    "last_commit_date": (
-                        a.branch.last_commit_date.isoformat()
-                        if a.branch and a.branch.last_commit_date
-                        else None
-                    ),
-                    "repo_description": a.branch.repo_description if a.branch else None,
-                    "repo_visibility": a.branch.repo_visibility if a.branch else None,
-                    "repo_web_url": a.branch.repo_web_url if a.branch else None,
-                    "repo_owner": a.branch.repo_owner if a.branch else None,
-                    "repo_default_branch": a.branch.repo_default_branch if a.branch else None,
-                    "data_source": a.branch.data_source if a.branch else None,
-                    "warnings": list(a.warnings),
-                    "notes": list(a.notes),
-                }
-                for a in result.analyses
-            ],
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "timestamp": result.timestamp.isoformat(),
+                "progress": result.progress.to_dict(),
+                "metrics": {
+                    "total": result.metrics.total,
+                    "ready": result.metrics.ready,
+                    "missing": result.metrics.missing,
+                    "invalid_naming": result.metrics.invalid_naming,
+                    "stale": result.metrics.stale,
+                    "error": result.metrics.error,
+                    "warning": result.metrics.warning,
+                    "readiness_pct": result.metrics.readiness_pct,
+                },
+                "analyses": [
+                    {
+                        "name": a.name,
+                        "layer": a.layer,
+                        "status": a.status.value,
+                        "status_label": a.status.localized_label(locale),
+                        "expected_branch": a.expected_branch_name,
+                        "branch_exists": a.branch_exists,
+                        "actual_branch": a.branch.name if a.branch and a.branch.exists else None,
+                        "naming_valid": a.naming_valid,
+                        "is_stale": a.is_stale,
+                        "error_message": a.error_message,
+                        "error_kind": a.error_kind,
+                        "error_detail": a.error_detail,
+                        "last_commit_sha": a.branch.last_commit_sha if a.branch else None,
+                        "last_commit_author": a.branch.last_commit_author if a.branch else None,
+                        "last_commit_message": a.branch.last_commit_message if a.branch else None,
+                        "last_commit_date": (
+                            a.branch.last_commit_date.isoformat()
+                            if a.branch and a.branch.last_commit_date
+                            else None
+                        ),
+                        "repo_description": a.branch.repo_description if a.branch else None,
+                        "repo_visibility": a.branch.repo_visibility if a.branch else None,
+                        "repo_web_url": a.branch.repo_web_url if a.branch else None,
+                        "repo_owner": a.branch.repo_owner if a.branch else None,
+                        "repo_default_branch": a.branch.repo_default_branch if a.branch else None,
+                        "data_source": a.branch.data_source if a.branch else None,
+                        "warnings": list(a.warnings),
+                        "notes": list(a.notes),
+                    }
+                    for a in result.analyses
+                ],
+            }
+        )
 
     @app.get("/api/export/html")
     async def export_html(request: Request) -> HTMLResponse:
@@ -898,16 +928,22 @@ def create_app(
 
         if state.analysis_result:
             vm = build_dashboard_view_model(
-                config, state.analysis_result.analyses, state.analysis_result.metrics,
+                config,
+                state.analysis_result.analyses,
+                state.analysis_result.metrics,
                 locale=locale,
                 config_raw=state.config_state.draft_raw,
             )
         else:
             from releaseboard.analysis.metrics import DashboardMetrics
+
             empty_metrics = DashboardMetrics()
             empty_metrics.total = len(config.repositories)
             vm = build_dashboard_view_model(
-                config, [], empty_metrics, locale=locale,
+                config,
+                [],
+                empty_metrics,
+                locale=locale,
                 config_raw=state.config_state.draft_raw,
             )
 
@@ -936,13 +972,15 @@ def create_app(
     async def app_status() -> JSONResponse:
         """Deep application health status."""
         if state is None:
-            return JSONResponse({
-                "ok": True,
-                "version": __version__,
-                "uptime_seconds": round(time.monotonic() - _start_time, 1),
-                "first_run": True,
-                "config_readable": False,
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "version": __version__,
+                    "uptime_seconds": round(time.monotonic() - _start_time, 1),
+                    "first_run": True,
+                    "config_readable": False,
+                }
+            )
         config_readable = False
         try:
             config_path.read_text(encoding="utf-8")
@@ -950,17 +988,19 @@ def create_app(
         except Exception:
             pass
 
-        return JSONResponse({
-            "ok": True,
-            "version": __version__,
-            "uptime_seconds": round(time.monotonic() - _start_time, 1),
-            "analysis_phase": state.analysis_progress.phase.value,
-            "analysis_running": state.analysis_lock.locked(),
-            "has_results": state.analysis_result is not None,
-            "has_unsaved_changes": state.config_state.has_unsaved_changes,
-            "config_readable": config_readable,
-            "sse_subscribers": len(state._sse_subscribers),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "version": __version__,
+                "uptime_seconds": round(time.monotonic() - _start_time, 1),
+                "analysis_phase": state.analysis_progress.phase.value,
+                "analysis_running": state.analysis_lock.locked(),
+                "has_results": state.analysis_result is not None,
+                "has_unsaved_changes": state.config_state.has_unsaved_changes,
+                "config_readable": config_readable,
+                "sse_subscribers": len(state._sse_subscribers),
+            }
+        )
 
     @app.get("/health/live")
     async def health_live() -> JSONResponse:
@@ -994,22 +1034,22 @@ def create_app(
                 continue
             ep = entry.path
             is_git = os.path.isdir(os.path.join(ep, ".git")) or (
-                os.path.isfile(os.path.join(ep, "HEAD"))
-                and os.path.isdir(os.path.join(ep, "refs"))
+                os.path.isfile(os.path.join(ep, "HEAD")) and os.path.isdir(os.path.join(ep, "refs"))
             )
             items.append({"name": entry.name, "path": ep, "is_git": is_git})
 
         cur_is_git = os.path.isdir(os.path.join(base, ".git")) or (
-            os.path.isfile(os.path.join(base, "HEAD"))
-            and os.path.isdir(os.path.join(base, "refs"))
+            os.path.isfile(os.path.join(base, "HEAD")) and os.path.isdir(os.path.join(base, "refs"))
         )
 
-        return JSONResponse({
-            "ok": True,
-            "current": base,
-            "is_git": cur_is_git,
-            "items": items,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "current": base,
+                "is_git": cur_is_git,
+                "items": items,
+            }
+        )
 
     @app.get("/health/ready")
     async def health_ready() -> JSONResponse:
@@ -1041,12 +1081,16 @@ def create_app(
         """Return an empty favicon to suppress browser 404 errors."""
         # 1x1 transparent PNG — avoids 404 without needing a real icon file
         import base64
+
         pixel = base64.b64decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAB"
             "Nl7BcQAAAABJRU5ErkJggg=="
         )
-        return Response(content=pixel, media_type="image/png",
-                        headers={"Cache-Control": "public, max-age=86400"})
+        return Response(
+            content=pixel,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
 
     @app.get("/api/i18n/{locale}")
     async def get_translations(locale: str) -> JSONResponse:
@@ -1072,39 +1116,47 @@ def create_app(
             url = (r.get("url") or "").strip()
             name = r.get("name", url)
             if not url:
-                results.append({
-                    "name": name,
-                    "status": "empty",
-                    "message": t("api.url_empty", locale=locale),
-                })
+                results.append(
+                    {
+                        "name": name,
+                        "status": "empty",
+                        "message": t("api.url_empty", locale=locale),
+                    }
+                )
             elif is_placeholder_url(url):
-                results.append({
-                    "name": name,
-                    "status": "placeholder",
-                    "message": t(
-                        "api.url_placeholder", locale=locale
-                    ),
-                })
+                results.append(
+                    {
+                        "name": name,
+                        "status": "placeholder",
+                        "message": t("api.url_placeholder", locale=locale),
+                    }
+                )
             elif not any(
                 url.startswith(s)
                 for s in (
-                    "http://", "https://", "git@",
-                    "ssh://", "git://", "/",
+                    "http://",
+                    "https://",
+                    "git@",
+                    "ssh://",
+                    "git://",
+                    "/",
                 )
             ):
-                results.append({
-                    "name": name,
-                    "status": "relative",
-                    "message": t(
-                        "api.url_relative", locale=locale
-                    ),
-                })
+                results.append(
+                    {
+                        "name": name,
+                        "status": "relative",
+                        "message": t("api.url_relative", locale=locale),
+                    }
+                )
             else:
-                results.append({
-                    "name": name,
-                    "status": "ok",
-                    "message": t("api.url_valid", locale=locale),
-                })
+                results.append(
+                    {
+                        "name": name,
+                        "status": "ok",
+                        "message": t("api.url_valid", locale=locale),
+                    }
+                )
         return JSONResponse({"ok": True, "results": results})
 
     # --- Discovery API ---
@@ -1164,9 +1216,7 @@ def create_app(
             _host = (urlparse(root_url).hostname or "").lower()
             url_is_github = "github.com" in _host
             url_is_gitlab = "gitlab" in _host
-            use_gitlab = url_is_gitlab or (
-                provider_type == "gitlab" and not url_is_github
-            )
+            use_gitlab = url_is_gitlab or (provider_type == "gitlab" and not url_is_github)
 
             if use_gitlab:
                 parsed_gl = parse_gitlab_group(root_url)
@@ -1199,9 +1249,7 @@ def create_app(
                     result_layers.append(layer_result)
                     continue
                 try:
-                    raw_repos = await asyncio.to_thread(
-                        github.list_org_repos, owner, timeout=30
-                    )
+                    raw_repos = await asyncio.to_thread(github.list_org_repos, owner, timeout=30)
                 except GitAccessError as exc:
                     warnings.append(f"Layer '{layer_label}': {exc}")
                     result_layers.append(layer_result)
@@ -1220,9 +1268,7 @@ def create_app(
                 branches: list[str] = []
                 if branch_lister:
                     try:
-                        branches = await asyncio.to_thread(
-                            branch_lister, repo_url, 15
-                        )
+                        branches = await asyncio.to_thread(branch_lister, repo_url, 15)
                     except Exception as exc:
                         logger.warning("Branch listing failed for %s: %s", repo_url, exc)
 
@@ -1232,25 +1278,29 @@ def create_app(
                         release_branch = b
                         break
 
-                layer_result["repos"].append({
-                    "name": repo_name,
-                    "url": repo_url,
-                    "full_url": repo_url,
-                    "default_branch": repo_info["default_branch"],
-                    "description": repo_info["description"],
-                    "branch_count": len(branches),
-                    "release_branch": release_branch,
-                    "included": True,
-                })
+                layer_result["repos"].append(
+                    {
+                        "name": repo_name,
+                        "url": repo_url,
+                        "full_url": repo_url,
+                        "default_branch": repo_info["default_branch"],
+                        "description": repo_info["description"],
+                        "branch_count": len(branches),
+                        "release_branch": release_branch,
+                        "included": True,
+                    }
+                )
 
             result_layers.append(layer_result)
 
-        return JSONResponse({
-            "ok": True,
-            "layers": result_layers,
-            "branch_pattern": global_branch_pattern,
-            "warnings": warnings,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "layers": result_layers,
+                "branch_pattern": global_branch_pattern,
+                "warnings": warnings,
+            }
+        )
 
     # --- ReleasePilot Integration API ---
 
@@ -1272,11 +1322,13 @@ def create_app(
         body = await _read_json_body(request)
         error_keys = release_pilot.validate(body)
         errors = [t(key, locale=locale) for key in error_keys]
-        return JSONResponse({
-            "ok": len(errors) == 0,
-            "errors": errors,
-            "error_keys": error_keys,
-        })
+        return JSONResponse(
+            {
+                "ok": len(errors) == 0,
+                "errors": errors,
+                "error_keys": error_keys,
+            }
+        )
 
     @app.post("/api/release-pilot/prepare")
     async def release_pilot_prepare(request: Request) -> JSONResponse:
@@ -1293,11 +1345,14 @@ def create_app(
         error_keys = release_pilot.validate(body)
         if error_keys:
             errors = [t(key, locale=locale) for key in error_keys]
-            return JSONResponse({
-                "ok": False,
-                "errors": errors,
-                "error_keys": error_keys,
-            }, status_code=422)
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "errors": errors,
+                    "error_keys": error_keys,
+                },
+                status_code=422,
+            )
 
         # Build request
         try:
@@ -1326,10 +1381,13 @@ def create_app(
                 git_token=_git_token,
             )
         except (KeyError, ValueError) as exc:
-            return JSONResponse({
-                "ok": False,
-                "errors": [f"Invalid request: {exc}"],
-            }, status_code=400)
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "errors": [f"Invalid request: {exc}"],
+                },
+                status_code=400,
+            )
 
         # Execute
         result = await release_pilot.prepare_release(prep_request)
@@ -1376,9 +1434,7 @@ def create_app(
                     "status_label": analysis.status.localized_label(locale),
                     "expected_branch": analysis.expected_branch_name,
                     "actual_branch": (
-                        analysis.branch.name
-                        if analysis.branch and analysis.branch.exists
-                        else ""
+                        analysis.branch.name if analysis.branch and analysis.branch.exists else ""
                     ),
                     "branch_exists": analysis.branch_exists,
                     "repo_default_branch": (
@@ -1436,11 +1492,13 @@ def create_app(
         save_errors = state.save_config()
         if save_errors:
             return JSONResponse({"ok": False, "errors": save_errors})
-        return JSONResponse({
-            "ok": True,
-            "has_unsaved_changes": False,
-            "etag": state.config_state.config_etag,
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "has_unsaved_changes": False,
+                "etag": state.config_state.config_etag,
+            }
+        )
 
     @app.post("/api/release-calendar/import")
     async def import_release_calendar(request: Request) -> JSONResponse:
@@ -1467,9 +1525,7 @@ def create_app(
             return JSONResponse(
                 {
                     "ok": False,
-                    "errors": [
-                        f"Import payload too large (max {MAX_IMPORT_SIZE_BYTES // 1024}KB)"
-                    ],
+                    "errors": [f"Import payload too large (max {MAX_IMPORT_SIZE_BYTES // 1024}KB)"],
                 },
                 status_code=413,
             )
@@ -1490,14 +1546,16 @@ def create_app(
         draft = state.get_draft()
         existing_cal = draft.get("release_calendar", {})
         if calendar_has_data(existing_cal) and not confirm:
-            return JSONResponse({
-                "ok": False,
-                "needs_confirmation": True,
-                "message": (
-                    "A release calendar already exists."
-                    " Set 'confirm_replace' to true to replace it."
-                ),
-            })
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "needs_confirmation": True,
+                    "message": (
+                        "A release calendar already exists."
+                        " Set 'confirm_replace' to true to replace it."
+                    ),
+                }
+            )
 
         # Apply import
         # Ensure defaults for missing optional fields
@@ -1523,13 +1581,15 @@ def create_app(
         if save_errors:
             return JSONResponse({"ok": False, "errors": save_errors})
 
-        return JSONResponse({
-            "ok": True,
-            "has_unsaved_changes": False,
-            "etag": state.config_state.config_etag,
-            "imported_events": len(cal_data.get("events", [])),
-            "imported_months": len(cal_data.get("months", [])),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "has_unsaved_changes": False,
+                "etag": state.config_state.config_etag,
+                "imported_events": len(cal_data.get("events", [])),
+                "imported_months": len(cal_data.get("months", [])),
+            }
+        )
 
     @app.get("/api/release-calendar/schema")
     async def get_calendar_schema() -> JSONResponse:
@@ -1539,11 +1599,13 @@ def create_app(
             get_import_schema_example,
         )
 
-        return JSONResponse({
-            "ok": True,
-            "schema": get_import_schema_definition(),
-            "example": get_import_schema_example(),
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "schema": get_import_schema_definition(),
+                "example": get_import_schema_example(),
+            }
+        )
 
     @app.get("/api/release-calendar/milestones")
     async def get_calendar_milestones() -> JSONResponse:

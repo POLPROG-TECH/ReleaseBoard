@@ -1,0 +1,131 @@
+{
+  "release": {
+    "name": "March 2025 Release",
+    "target_month": 3,
+    "target_year": 2026,
+    "branch_pattern": "release/{YYYY}.{MM}"
+  },
+  "layers": [
+    {
+      "id": "frontend",
+      "label": "Frontend",
+      "color": "#7C5CFC",
+      "order": 0,
+      "repository_root_url": "https://github.com/acme"
+    },
+    {
+      "id": "backend",
+      "label": "Backend",
+      "color": "#10B981",
+      "order": 1,
+      "repository_root_url": "https://github.com/acme"
+    },
+    {
+      "id": "infra",
+      "label": "Infrastructure",
+      "color": "#F59E0B",
+      "order": 2,
+      "repository_root_url": "https://github.com/acme"
+    }
+  ],
+  "repositories": [
+    {
+      "name": "WebApp",
+      "url": "https://github.com/acme/webapp",
+      "layer": "frontend",
+      "default_branch": "main"
+    },
+    {
+      "name": "MobileApp",
+      "url": "https://github.com/acme/mobile-app",
+      "layer": "frontend",
+      "default_branch": "main"
+    },
+    {
+      "name": "DesignSystem",
+      "url": "https://github.com/acme/design-system",
+      "layer": "frontend",
+      "default_branch": "main"
+    },
+    {
+      "name": "API Gateway",
+      "url": "https://github.com/acme/api-gateway",
+      "layer": "backend",
+      "default_branch": "main"
+    },
+    {
+      "name": "AuthService",
+      "url": "https://github.com/acme/auth-service",
+      "layer": "backend",
+      "default_branch": "main"
+    },
+    {
+      "name": "DataPipeline",
+      "url": "https://github.com/acme/data-pipeline",
+      "layer": "backend",
+      "default_branch": "main"
+    },
+    {
+      "name": "UserService",
+      "url": "https://github.com/acme/user-service",
+      "layer": "backend",
+      "default_branch": "main"
+    },
+    {
+      "name": "Terraform",
+      "url": "https://github.com/acme/terraform-infra",
+      "layer": "infra",
+      "default_branch": "main"
+    },
+    {
+      "name": "Helm Charts",
+      "url": "https://github.com/acme/helm-charts",
+      "layer": "infra",
+      "default_branch": "main"
+    }
+  ],
+  "branding": {
+    "title": "ReleaseBoard",
+    "subtitle": "Release Readiness Dashboard",
+    "company": "Acme Inc.",
+    "accent_color": "#fb6400",
+    "secondary_color": "#002754e6",
+    "primary_color": "#fb6400",
+    "tertiary_color": "#10b981",
+    "logo_path": null
+  },
+  "settings": {
+    "stale_threshold_days": 14,
+    "output_path": "output/dashboard.html",
+    "theme": "system",
+    "verbose": false,
+    "timeout_seconds": 30,
+    "max_concurrent": 5,
+    "repository_root_url": "https://github.com/acme"
+  },
+  "layout": {
+    "default_template": "engineering",
+    "section_order": [
+      "score",
+      "metrics",
+      "charts",
+      "filters",
+      "attention",
+      "layer-*",
+      "summary"
+    ],
+    "enable_drag_drop": true
+  },
+  "release_calendar": {
+    "name": "",
+    "year": 2026,
+    "notes": "",
+    "months": [],
+    "events": [],
+    "display": {
+      "show_notes": true,
+      "show_weekdays": true,
+      "show_quarter_headers": true
+    }
+  }
+}
